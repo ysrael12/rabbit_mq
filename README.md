@@ -216,7 +216,7 @@ completo (cliente → conversor → 2 storages) sobre um broker em memória, com
 duas réplicas têm conteúdo idêntico, que todo pixel de saída tem os três canais iguais e que nada
 ficou sem ack.
 
-Depois do empacotamento, a prova ponta a ponta é:
+Depois do empacotamento, a prova ponta a ponta foi:
 
 ```bash
 ls pastas-storage/storage1 pastas-storage/storage2   # os mesmos nomes enviados pelo cliente
