@@ -8,7 +8,8 @@ mesmo nome do arquivo original.
 Trabalho da disciplina de Sistemas Distribuídos (COMP0470, UFS) — Atividade 01 U1.
 
 > Status: **modelagem concluída; implementação em andamento.** Este repositório nasce com os
-> diagramas e com o contrato de classes fechado antes do código (figura 5 abaixo).
+> diagramas, com o contrato de classes e com a organização em **padrões GoF** fechados antes do
+> código.
 
 ---
 
@@ -37,15 +38,16 @@ clientes ──▶ fila.originais ──▶ conversores ──▶ exchange conve
 Duas decisões sustentam os requisitos R4 e R5:
 
 - **Exchange do tipo `fanout`** no lugar de um processo "sender" que reenvia para outras filas.
-  Um processo roteador entrega cada mensagem a **um** destino (round-robin), então o storage que
-  cai perde a parte dele do acervo. No fanout o broker copia a mensagem para **todas** as filas
-  vinculadas, logo toda réplica tem tudo. O número de réplicas deixa de ser um parâmetro do
-  código e passa a ser a quantidade de serviços `storage` no compose.
+  Um processo roteador entrega cada mensagem a **um** destino, então o storage que cai perde a
+  parte dele do acervo. No fanout o broker copia a mensagem para **todas** as filas vinculadas,
+  logo toda réplica tem tudo.
 - **Payload com o nome original + bytes da imagem**, gravado pelo storage sem gerar UUID e sem
   renomear — é o que faz a imagem convertida sair com o nome da original.
 
-Garantia de não perder arquivo: fila durável, mensagem persistente, `basic_qos(prefetch=1)` e
-**ack manual depois do trabalho**.
+Garantia de não perder arquivo: fila durável, mensagem persistente, `prefetch 1` e **ack manual
+depois do trabalho**. Não perder arquivo em queda do broker/consumidor. Detalhe importante do
+desenho: a cópia para as réplicas e a durabilidade são **configuração** (broker/compose), não
+código de roteamento — a aplicação não tem uma linha decidindo para qual storage enviar.
 
 Diagrama da arquitetura proposta: [`docs/arquitetura-proposta.png`](docs/arquitetura-proposta.png)
 
@@ -71,131 +73,81 @@ GraphViz `dot`):
 java -jar plantuml.jar -tpng -charset UTF-8 -o png docs/uml/*.puml
 ```
 
-## 4. Design patterns aplicados
+## 4. Padrões: somente GoF
 
-Nenhum padrão entra aqui por catálogo. Cada linha abaixo resolve um problema concreto deste
-projeto — e os que foram **evitados** estão listados com o motivo, que é a metade útil da
-decisão.
+Decisão do projeto: **apenas padrões GoF** (*Design Patterns*, Gamma et al.). Padrões de
+integração (EIP) e de resiliência ficam fora; o desenho atende os requisitos sem eles, porque a
+replicação por fanout e a durabilidade são configuração do broker, não código.
 
-### 4.1 Resumo
+Documento completo, com o código de cada padrão e o motivo de cada escolha:
+[`docs/patterns.md`](docs/patterns.md).
 
-| Padrão | Origem | Onde entra | Resolve |
+### 4.1 Os dez padrões e por que cada um existe aqui
+
+| Padrão | Categoria | Onde | O que quebra sem ele |
 |---|---|---|---|
-| **Publish-Subscribe Channel** | EIP (Hohpe/Woolf) | exchange `convertidas` tipo fanout | R4 — a mesma mensagem chega a N réplicas |
-| **Competing Consumers** | EIP | N clientes na `fila.originais`, N conversores | R1, R2 — escala horizontal sem alterar o produtor |
-| **Guaranteed Delivery / durável** | EIP | `queue_declare(durable)`, `delivery_mode=PERSISTENT` | não perder arquivo em queda do broker |
-| **Idempotent Receiver** | EIP | gravação com o nome original, sobrescrevendo | repetir entrega não duplica o acervo |
-| **Dead Letter Channel** | EIP | fila `morta` para mensagem inválida | não travar um consumidor (opcional, hoje fora do escopo) |
-| **Strategy** | GoF | trait `Servico` + `Cliente`/`Conversor`/`Storage` | um binário, três comportamentos, um ponto de troca |
-| **Command** | GoF | despacho por subcomando em `main` | encapsular "o que rodar" sem `if` espalhado |
-| **Template Method** | GoF | laço comum no default de `Servico::executar` | o esqueleto (consumir → tratar → contar → resumir) escrito uma vez |
-| **Facade** | GoF | módulo `amqp` sobre o `lapin` | o resto do código não conhece a biblioteca AMQP |
-| **Adapter** | GoF | módulos `amqp` e `io_imagem` | trocar `lapin`/`image` sem tocar no domínio |
-| **Factory Method** (forma simples) | GoF | `main::construir(papel, cfg) -> Box<dyn Servico>` | um único lugar cria o serviço certo |
-| **Ports & Adapters** | Cockburn (arquitetural) | domínio + portas `amqp`, `io_imagem`, `pasta` | o fluxo não depende do broker nem do codec |
-| **Circuit Breaker + Retry com backoff** | Nygard, *Release It!* | reconexão ao broker no cliente | o cliente que publica e sai não morre com um broker reiniciando (opcional) |
+| **Facade** | Estrutural | `estrutural/facade/broker.rs` | Toda a aplicação passa a conhecer a API do `lapin`; trocar de biblioteca AMQP vira refatoração global |
+| **Adapter** | Estrutural | `estrutural/adapter/` | O domínio fala em `to_luma8`/`DynamicImage` em vez de "converter para tons de cinza" |
+| **Decorator** | Estrutural | `estrutural/decorator/` | Validar imagem ou medir tempo exigiria um `if` dentro do conversor |
+| **Strategy** | Comportamental | `comportamento/strategy/servico.rs` | Três `main`s, ou um `match` de papel espalhado pelo fluxo |
+| **Template Method** | Comportamental | default de `Servico::executar` | O laço (e o ack depois do trabalho) copiado três vezes, com uma cópia errada |
+| **Command** | Comportamental | `comportamento/command/comando.rs` | `main` com `if/else` por argumento e contadores espalhados |
+| **Mediator** | Comportamental | `comportamento/mediator/topologia.rs` | Cada serviço declara fila/exchange/bind; adicionar réplica obriga a editar cliente e conversor |
+| **Observer** | Comportamental | `comportamento/observer/relatorio.rs` | O componente de execução precisa saber quem imprime e contar para cada destino |
+| **Factory Method** | Criacional | `criacional/factory_method/` | O `main` sabe construir cada serviço e não há como trocar por portas falsas em teste |
 
-### 4.2 Os que realmente importam aqui
+### 4.2 Deliberadamente não usados
 
-**Publish-Subscribe Channel (fanout)** — é o padrão que *é* o requisito R4. A alternativa
-intuitiva (um componente que distribui para as filas de destino) é o **Content-Based Router /
-Recipient List**, que entrega cada mensagem a um destino escolhido — ou seja, particiona os
-dados em vez de replicá-los. O fanout não escolhe: copia para todos os binds. Em uma frase: se o
-requisito é redundância, o roteamento tem que ser feito pelo broker, não pela aplicação.
-
-**Competing Consumers** — vários consumidores na *mesma* fila. Isso dá escalabilidade (R2)
-porque cada mensagem vai para **um** consumidor; é exatamente o oposto do fanout e é o que
-permite subir `conversor3` sem mexer em ninguém. O par que evita confundir os dois conceitos:
-*uma fila com N consumidores = trabalho dividido; um exchange com N filas = dado replicado.*
-
-**Guaranteed Delivery + Idempotent Receiver** — o par que atende "não perder arquivo" sem
-inventar código de retry. Com `prefetch=1` e ack manual depois da conversão, uma queda do
-conversor no meio do caminho faz o broker reentregar a mensagem. Isso significa **entrega
-at-least-once**: o arquivo pode ser convertido duas vezes. O padrão que torna isso inofensivo é o
-Idempotent Receiver — como a saída mantém o nome original, reprocessar apenas sobrescreve o
-arquivo com o mesmo conteúdo. Sem essa propriedade, o at-least-once do RabbitMQ viraria arquivo
-duplicado.
-
-**Strategy (trait `Servico`)** — cliente, conversor e storage são o mesmo binário, com o mesmo
-formato de execução: um laço que conta o que processou e imprime o total. `Servico` com
-`executar(&mut self) -> Result<u64>` concentra a diferença no momento da construção e deixa
-`main` com um único caminho. A alternativa seria uma enumeração de papéis com `match` espalhado
-por todo o programa; o retorno em `u64` existe porque R6 pede números por execução, não só log.
-
-**Template Method no trait** — o esqueleto de execução (declarar topologia → consumir/publicar
-em laço → contar → imprimir resumo) é idêntico nos três papéis. Escrever isso como método default
-de `Servico` e deixar cada implementação fornecer só os passos variáveis evita três cópias da
-mesma estrutura — e é o lugar onde o ack manual e o prefetch ficam garantidos para todos.
-
-**Facade + Adapter no módulo `amqp`** — todo acesso ao `lapin` passa por `conectar`,
-`propriedades_persistentes`, `prefetch_um`, `declarar`, `vincular`. Ganho concreto, não
-estético: a troca de `rust-rabbit` por `lapin` já foi cogitada, e com a fachada ela seria uma
-alteração em um módulo só. `io_imagem` faz o mesmo papel para o crate `image` (o domínio conhece
-`converter(bytes) -> bytes`, não `to_luma8`, `DynamicImage` nem `save`).
-
-**Ports & Adapters** — consequência dos dois acima: o fluxo de conversão é expressável sem citar
-RabbitMQ. `Conversor` chama a porta `amqp` e a porta `io_imagem`; qual biblioteca está atrás é
-detalhe de adaptador. É o que permite, por exemplo, testar a conversão sem broker.
-
-### 4.3 O que foi deliberadamente **não** usado
-
-| Não usar | Por quê |
+| Padrão | Por que **não** |
 |---|---|
-| **Singleton** para a conexão/canal | Estado global em serviço concorrente é bug esperando acontecer. A conexão é campo da struct; o canal nasce no `novo()` e morre com o serviço. |
-| **Abstract Factory** / hierarquia de fábricas | Só existe uma família de objetos (um broker, um codec). `construir(papel, cfg)` é a forma simples do Factory Method e resolve com um `match` de três braços. |
-| **Builder para `Config`** | Rust já dá `Default` + struct update (`..Default::default()`). Builder vale a pena quando há muitas combinações válidas de campos; aqui são seis variáveis de ambiente e uma validação. |
-| **Pool de conexões próprio** | O modelo do AMQP já é conexão por processo com canais leves dentro dela. Criar pool é resolver um problema que o protocolo não tem. |
-| **UUID no nome do arquivo** | Atende "não sobrescrever", mas viola R5 (mesmo nome do original) e destrói a idempotência da regravação. Se a colisão de nomes de clientes diferentes for problema real, a solução é prefixo de pasta por cliente, não renomear. |
-| **Content-Based Router / Recipient List** | Substitui o fanout por escolha de destino — entrega parcial, colide com R4. |
-| **Message Translator / XML / schema registry** | O payload é bytes + nome, decidido na modelagem. Trazer serialização para cá é dependência nova sem requisito novo. |
-| **Um repositório/ORM para "persistência"** | A persistência é "grava arquivo na pasta" — `std::fs` resolve. |
-
-### 4.4 Onde cada padrão aparece no contrato
-
-Referência cruzada com a figura 5 ([diagrama de classes de implementação](docs/uml/05%20classes%20implementacao.puml)):
-
-| Elemento do contrato | Padrão |
-|---|---|
-| trait `Servico` + `Cliente` / `Conversor` / `Storage` | Strategy (e Template Method no default de `executar`) |
-| `main::construir(papel, cfg) -> Servico` e enum `Papel` | Command (despacho por subcomando) + forma simples de Factory Method |
-| módulo `amqp` (`conectar`, `propriedades_persistentes`, `prefetch_um`) | Facade sobre o `lapin`; Adapter da porta AMQP |
-| módulo `io_imagem` (`converter`, `extensao`) | Adapter sobre o crate `image` |
-| `Topologia::declarar` / `vincular` | o bind no fanout que materializa o Publish-Subscribe Channel |
-| `Mensagem` (`escrever` / `ler`) | o payload que torna o Idempotent Receiver possível |
-| `Storage::salvar` (nome original, sobrescrevendo) | Idempotent Receiver |
-| `amqp::prefetch_um` + ack manual em `Conversor::tratar` | Guaranteed Delivery (ack depois do trabalho) |
+| **Singleton** | Estado global em serviço concorrente é bug esperando acontecer. Conexão e canal são campos da struct: nascem no `novo()` e morrem com o serviço. |
+| **Builder** | Rust já entrega `Default` + struct update. Builder paga o próprio custo quando há muitas combinações válidas; aqui são seis variáveis de ambiente e uma validação. |
+| **Abstract Factory** | Existe uma única família de objetos (um broker, um codec de imagem) — seria fábrica com uma implementação só. |
+| **Prototype** | Nada nasce de cópia: os objetos vêm do `Config`. |
+| **UUID no nome do arquivo** | Atende "não sobrescrever", mas viola R5 e destrói a idempotência da regravação. Colisão de nomes entre clientes se resolve com prefixo de pasta, não renomeando. |
+| **Pool de conexões próprio** | O AMQP já é conexão por processo com canais leves dentro dela. |
 
 ## 5. Estrutura do repositório
 
 ```
 rabbit_mq/
-├── README.md                  # este arquivo
-├── Cargo.toml                 # binário único "app"
-├── Dockerfile                 # multi-stage: rust:slim (build) → debian slim (runtime)
-├── docker-compose.yml         # rabbitmq + cliente1/2 + conversor1/2 + storage1/2
-├── .gitignore
+├── README.md
+├── docs/
+│   ├── patterns.md                # os padrões GoF, com código e justificativa
+│   ├── arquitetura-proposta.png
+│   └── uml/                       # fontes PlantUML + PNG das 5 figuras
+├── Cargo.toml                     # a definir na implementação (binário único "app")
+├── Dockerfile                     # multi-stage: rust:slim (build) → debian slim (runtime)
+├── docker-compose.yml             # rabbitmq + cliente1/2 + conversor1/2 + storage1/2
 ├── src/
-│   ├── main.rs                # main + enum Papel + Config::from_env + construir()
-│   ├── servico.rs             # trait Servico (executar, e o template default)
-│   ├── cliente.rs             # publica a pasta de entrada em fila.originais
-│   ├── conversor.rs           # consome, converte, publica no exchange fanout, ack
-│   ├── storage.rs             # consome a fila de storage e grava com o nome original
-│   ├── mensagem.rs            # payload: tamanho do nome (4 bytes BE) + nome UTF-8 + bytes
-│   ├── topologia.rs           # declaração de filas/exchange e binds
-│   ├── amqp.rs                # fachada sobre o lapin
-│   ├── io_imagem.rs           # adaptador do crate image (to_luma8 + save)
-│   ├── relatorio.rs           # contadores por execução
-│   └── erro.rs                # tipo de resultado comum
+│   ├── main.rs                    # args → Config → Comando (Factory Method) → executar
+│   ├── comum/
+│   │   ├── config/                # Config::from_env
+│   │   ├── mensagem/              # payload: 4 bytes BE com tamanho do nome + nome UTF-8 + bytes
+│   │   ├── erro/                  # Res<T>
+│   │   └── relatorio/             # formatação do resumo da execução
+│   ├── criacional/
+│   │   └── factory_method/        # FabricaServico + criar(Papel, Config)
+│   ├── estrutural/
+│   │   ├── facade/                # Broker: fachada do lapin
+│   │   ├── adapter/               # io_imagem (crate image) + lapin_adapter
+│   │   └── decorator/             # Passo + Validar / MedirTempo / Reenviar
+│   └── comportamento/
+│       ├── strategy/              # trait Servico + Cliente / Conversor / Storage
+│       ├── template_method/       # Servico::executar — esqueleto do laço
+│       ├── command/               # Pedido, Comando, Invocador
+│       ├── observer/              # Evento, Observador, Assunto
+│       └── mediator/              # Topologia (filas, exchange, binds)
 ├── pastas-cliente/
-│   ├── cliente1/              # imagens que o cliente1 publica
+│   ├── cliente1/                  # imagens que o cliente1 publica
 │   └── cliente2/
-├── pastas-storage/
-│   ├── storage1/              # destino do storage1 (bind mount rw)
-│   └── storage2/
-└── docs/
-    ├── arquitetura-proposta.png
-    └── uml/                   # fontes PlantUML + PNG das 5 figuras
+└── pastas-storage/
+    ├── storage1/                  # destino do storage1 (bind mount rw)
+    └── storage2/
 ```
+
+Correspondência: **nome da pasta = nome do padrão**, para que a intenção apareça no caminho do
+arquivo. Cada pasta tem seu `mod.rs`/arquivo do padrão, declarado em `main.rs`.
 
 ## 6. Como rodar
 
@@ -226,17 +178,5 @@ ls pastas-storage/storage1 pastas-storage/storage2   # os mesmos nomes enviados 
 md5sum pastas-storage/storage1/* pastas-storage/storage2/*   # hashes iguais = mesma imagem
 ```
 
-Mais os contadores de cada execução: quantas imagens entraram na fila e quantas cada storage
-gravou — número, não linha bonita de log.
-
-## 8. Referências
-
-- Hohpe, G.; Woolf, B. *Enterprise Integration Patterns*. Addison-Wesley. (Publish-Subscribe
-  Channel, Competing Consumers, Guaranteed Delivery, Idempotent Receiver, Dead Letter Channel)
-- Gamma, E. et al. *Design Patterns: Elements of Reusable Object-Oriented Software*. (Strategy,
-  Command, Template Method, Facade, Adapter, Factory Method)
-- Cockburn, A. *Hexagonal Architecture* (Ports & Adapters).
-- Nygard, M. *Release It!* (Circuit Breaker, Retry com backoff).
-- RabbitMQ — [Tutorials: Publish/Subscribe](https://www.rabbitmq.com/tutorials/tutorial-three-python),
-  [Reliability Guide](https://www.rabbitmq.com/docs/reliability), [Consumer Prefetch](https://www.rabbitmq.com/docs/consumer-prefetch).
-- Boschi, S.; Santomaggio, G. *RabbitMQ Cookbook*. Packt Publishing.
+Mais os contadores de cada execução (Observer → resumo): quantas imagens entraram na fila e
+quantas cada storage gravou — número, não linha bonita de log.
