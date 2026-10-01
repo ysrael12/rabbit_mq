@@ -1,7 +1,7 @@
 @startuml
 ' Diagrama 10 — estrutural/facade + adapter
 skinparam shadowing false
-skinparam dpi 130
+skinparam dpi 300
 skinparam defaultFontName "Segoe UI"
 skinparam classAttributeIconSize 0
 skinparam class {

@@ -1,7 +1,7 @@
 @startuml
 ' Diagrama 06 — mapa de modulos de src/ por categoria GoF
 skinparam shadowing false
-skinparam dpi 130
+skinparam dpi 300
 skinparam defaultFontName "Segoe UI"
 skinparam defaultTextAlignment center
 skinparam arrowColor #45637F
