@@ -127,41 +127,7 @@ GraphViz `dot`):
 java -jar plantuml.jar -tpng -charset UTF-8 -o png docs/uml/*.puml
 ```
 
-## 4. Padrões: somente GoF
-
-Decisão do projeto: **apenas padrões GoF** (*Design Patterns*, Gamma et al.). Padrões de
-integração (EIP) e de resiliência ficam fora; o desenho atende os requisitos sem eles, porque a
-replicação por fanout e a durabilidade são configuração do broker, não código.
-
-Documento completo, com o código de cada padrão e o motivo de cada escolha:
-[`docs/patterns.md`](docs/patterns.md).
-
-### 4.1 Os dez padrões e por que cada um existe aqui
-
-| Padrão | Categoria | Onde | O que quebra sem ele |
-|---|---|---|---|
-| **Facade** | Estrutural | `estrutural/facade/broker.rs` | Toda a aplicação passa a conhecer a API do `lapin`; trocar de biblioteca AMQP vira refatoração global |
-| **Adapter** | Estrutural | `estrutural/adapter/` | O domínio fala em `to_luma8`/`DynamicImage` em vez de "converter para tons de cinza" |
-| **Decorator** | Estrutural | `estrutural/decorator/` | Validar imagem ou medir tempo exigiria um `if` dentro do conversor |
-| **Strategy** | Comportamental | `comportamento/strategy/servico.rs` | Três `main`s, ou um `match` de papel espalhado pelo fluxo |
-| **Template Method** | Comportamental | default de `Servico::executar` | O laço (e o ack depois do trabalho) copiado três vezes, com uma cópia errada |
-| **Command** | Comportamental | `comportamento/command/comando.rs` | `main` com `if/else` por argumento e contadores espalhados |
-| **Mediator** | Comportamental | `comportamento/mediator/topologia.rs` | Cada serviço declara fila/exchange/bind; adicionar réplica obriga a editar cliente e conversor |
-| **Observer** | Comportamental | `comportamento/observer/relatorio.rs` | O componente de execução precisa saber quem imprime e contar para cada destino |
-| **Factory Method** | Criacional | `criacional/factory_method/` | O `main` sabe construir cada serviço e não há como trocar por portas falsas em teste |
-
-### 4.2 Deliberadamente não usados
-
-| Padrão | Por que **não** |
-|---|---|
-| **Singleton** | Estado global em serviço concorrente é bug esperando acontecer. Conexão e canal são campos da struct: nascem no `novo()` e morrem com o serviço. |
-| **Builder** | Rust já entrega `Default` + struct update. Builder paga o próprio custo quando há muitas combinações válidas; aqui são seis variáveis de ambiente e uma validação. |
-| **Abstract Factory** | Existe uma única família de objetos (um broker, um codec de imagem) — seria fábrica com uma implementação só. |
-| **Prototype** | Nada nasce de cópia: os objetos vêm do `Config`. |
-| **UUID no nome do arquivo** | Atende "não sobrescrever", mas viola R5 e destrói a idempotência da regravação. Colisão de nomes entre clientes se resolve com prefixo de pasta, não renomeando. |
-| **Pool de conexões próprio** | O AMQP já é conexão por processo com canais leves dentro dela. |
-
-## 5. Estrutura do repositório
+## 4. Estrutura do repositório
 
 ```mermaid
 graph TD
@@ -195,7 +161,7 @@ Correspondência: o código ficou **em camadas** (`modelos/` + `controladores/`)
 **nome da pasta = nome do padrão** como o diagrama 06 pede — o mapa padrão ↔ arquivo está em
 [`docs/patterns.md`](docs/patterns.md) §5.1.
 
-## 6. Como rodar
+## 5. Como rodar
 
 ```bash
 docker compose up --build -d     # sobe broker, clientes, conversores e storages
@@ -215,7 +181,7 @@ bind mount por instância, por isso **não** se usa `--scale`):
 | `PASTA_ENTRADA` | pasta lida pelo cliente |
 | `PASTA_SAIDA` | pasta gravada pelo storage |
 
-## 7. Verificação
+## 6. Verificação
 
 Log de terminal é indício, não prova. A prova é:
 
