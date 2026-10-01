@@ -1,0 +1,72 @@
+@startuml
+skinparam shadowing false
+skinparam dpi 130
+skinparam defaultFontName "Segoe UI"
+skinparam class {
+  BackgroundColor #EAF1FA
+  BorderColor #1F3B5C
+  FontColor #12314F
+  AttributeFontSize 12
+  AttributeFontColor #33475B
+}
+skinparam note {
+  BackgroundColor #FFF9E6
+  BorderColor #B8860B
+}
+hide empty members
+top to bottom direction
+
+title <size:17>Modelo de classes: dependencias entre as instancias Docker e as bibliotecas</size>
+
+class "app" as APP {
+  + main(args): dispatch por subcomando
+}
+
+class "cliente" as CLI {
+  - pasta_entrada: env
+  + publicar_imagens(): contador
+}
+
+class "conversor" as CONV {
+  + converter(bytes): bytes
+  + confirmar(): basic_ack
+}
+
+class "storage" as STOR {
+  - pasta_saida: env
+  + gravar(nome, bytes): arquivo
+}
+
+class "lapin" as LAPIN {
+  + Connection::connect()
+  + Channel::basic_publish()
+  + basic_ack()
+}
+
+class "image" as IMG {
+  + to_luma8()
+  + save(com nome original)
+}
+
+class "rabbitmq" as MQ {
+  + fila.originais (duravel)
+  + exchange convertidas (fanout)
+  + fila storage.1 / storage.2
+}
+
+APP <|-- CLI
+APP <|-- CONV
+APP <|-- STOR
+
+CLI ..> LAPIN
+CONV ..> LAPIN
+STOR ..> LAPIN
+CONV ..> IMG
+LAPIN ..> MQ
+
+note right of CONV
+  requisito de nao perder arquivo:
+  fila duravel + mensagem persistente
+  + ack manual + prefetch 1
+end note
+@enduml

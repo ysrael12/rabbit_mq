@@ -1,0 +1,26 @@
+# build
+/target
+**/*.rs.bk
+*.pdb
+
+# docker
+*.tar
+*.log
+
+# imagens de teste: só as pastas vazias ficam versionadas
+pastas-cliente/cliente1/*
+pastas-cliente/cliente2/*
+pastas-storage/storage1/*
+pastas-storage/storage2/*
+!pastas-cliente/cliente1/.gitkeep
+!pastas-cliente/cliente2/.gitkeep
+!pastas-storage/storage1/.gitkeep
+!pastas-storage/storage2/.gitkeep
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.bkp
+*.dtmp

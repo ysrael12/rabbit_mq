@@ -1,0 +1,191 @@
+@startuml
+' Diagrama de classes de IMPLANTACAO (visao de codigo) — binario Rust unico
+skinparam shadowing false
+skinparam dpi 130
+skinparam defaultFontName "Segoe UI"
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #EAF1FA
+  BorderColor #1F3B5C
+  FontColor #12314F
+  AttributeFontSize 12
+  AttributeFontColor #33475B
+}
+skinparam package {
+  BackgroundColor #F7F9FC
+  BorderColor #1F3B5C
+  FontColor #12314F
+}
+skinparam note {
+  BackgroundColor #FFF9E6
+  BorderColor #B8860B
+}
+hide circle
+hide empty members
+
+title <size:17>Modelo de implementacao — classes do binario app (Rust + lapin + image 0.25)</size>\n<size:12>Todas as funcoes retornam Result; assinaturas prontas para virar codigo</size>
+
+package "binario app (unico, multi-stage)" {
+
+  class "main" as MAIN <<bin>> {
+    - papel_de(args: Vec<String>) : Papel
+    - construir(papel: Papel, cfg: Config) : Servico
+    + main() : Result
+  }
+
+  enum "Papel" as PAPEL {
+    Cliente
+    Conversor
+    Storage
+  }
+
+  class "Config" as CFG <<struct>> {
+    + amqp_url : String
+    + fila_originais : String
+    + exchange_convertidas : String
+    + fila_storage : String
+    + pasta_entrada : PathBuf
+    + pasta_saida : PathBuf
+    + from_env(papel: Papel) : Result<Config>
+  }
+
+  interface "Servico" as SERV <<trait>> {
+    + executar(&mut self) : Result<u64>
+  }
+
+  class "Cliente" as CLI <<struct>> {
+    - cfg : Config
+    - canal : Channel
+    - publicadas : u64
+    + novo(cfg: Config) : Result<Cliente>
+    + executar(&mut self) : Result<u64>
+    - listar_imagens() : Result<Vec<PathBuf>>
+    - publicar(nome: String, bytes: Vec<u8>) : Result
+  }
+
+  class "Conversor" as CONV <<struct>> {
+    - cfg : Config
+    - canal : Channel
+    - processadas : u64
+    + novo(cfg: Config) : Result<Conversor>
+    + executar(&mut self) : Result<u64>
+    - tratar(payload: Vec<u8>, tag: u64) : Result
+  }
+
+  class "Storage" as STOR <<struct>> {
+    - cfg : Config
+    - canal : Channel
+    - salvas : u64
+    + novo(cfg: Config) : Result<Storage>
+    + executar(&mut self) : Result<u64>
+    - salvar(nome: String, bytes: Vec<u8>) : Result<PathBuf>
+  }
+
+  class "Mensagem" as MSG <<struct>> {
+    + nome : String
+    + bytes : Vec<u8>
+    + escrever(&self) : Vec<u8>
+    + ler(payload: Vec<u8>) : Result<Mensagem>
+  }
+
+  class "Topologia" as TOPO <<struct>> {
+    + fila_originais : String
+    + exchange_convertidas : String
+    + fila_storage : String
+    + declarar(canal: &Channel, papel: Papel) : Result
+    + vincular(canal: &Channel, fila: &str, exchange: &str) : Result
+  }
+}
+
+package "modulos auxiliares" {
+  class "amqp" as AMQPM <<mod>> {
+    + conectar(url: &str) : Result<Channel>
+    + propriedades_persistentes() : BasicProperties
+    + prefetch_um(canal: &Channel) : Result
+  }
+
+  class "io_imagem" as IMGM <<mod>> {
+    + converter(bytes: Vec<u8>) : Result<Vec<u8>>
+    + extensao(nome: &str) : Option<String>
+  }
+
+  class "relatorio" as RELM <<mod>> {
+    + publicadas : u64
+    + salvas : u64
+    + resumo(papel: Papel) : String
+  }
+
+  class "erro" as ERRM <<mod>> {
+    + Res[T] : Result<T, anyhow::Error>
+  }
+}
+
+package "crates externos" {
+  class "tokio" as TOKIO <<#[tokio::main]>>
+  class "lapin::Channel" as CH {
+    + basic_publish(exchange, routing_key, props, payload)
+    + basic_consume(fila, tag, options, handler)
+    + basic_ack(delivery_tag)
+    + basic_qos(prefetch_count)
+    + queue_declare(fila, durable)
+    + exchange_declare(exchange, tipo, durable)
+  }
+  class "image 0.25" as IMLIB
+  class "anyhow" as ANYHOW
+}
+
+MAIN ..> PAPEL
+MAIN ..> CFG
+MAIN ..> SERV
+PAPEL <.. CFG
+
+CLI ..|> SERV
+CONV ..|> SERV
+STOR ..|> SERV
+
+CLI *-- CFG
+CONV *-- CFG
+STOR *-- CFG
+
+CLI ..> MSG : "escreve"
+CONV ..> MSG : "le"
+CLI ..> TOPO
+CONV ..> TOPO
+STOR ..> TOPO
+
+CLI ..> AMQPM
+CONV ..> AMQPM
+STOR ..> AMQPM
+CONV ..> IMGM
+CLI ..> RELM
+CONV ..> RELM
+STOR ..> RELM
+AMQPM ..> CH
+
+note right of MSG
+  Payload sem dependencia nova:
+  escrever() = 4 bytes big-endian com o tamanho do nome,
+  depois o nome UTF-8, depois os bytes da imagem.
+  ler() = caminho inverso. Evita serde/base64 e mantem
+  o nome original junto do arquivo.
+end note
+
+note bottom of TOPO
+  declarar() por papel:
+  Cliente  -> queue_declare(fila.originais, durable=true)
+  Conversor-> + exchange_declare(convertidas, FANOUT, durable=true)
+  Storage  -> + queue_declare(fila.storage.N, durable=true)
+              + vincular(fila.storage.N, convertidas)
+  Toda publicacao usa delivery_mode=PERSISTENT e todo
+  consumo usa ack manual (basic_ack apos o trabalho).
+end note
+
+note left of CONV
+  Ordem do tratar():
+  1 converter()  2 basic_publish no exchange
+  3 basic_ack(tag)
+  Ack depois do publish = at-least-once. Se o processo cair
+  entre 2 e 3, a mensagem volta e o convertido e regravado
+  com o MESMO nome (sobrescreve, sem duplicar arquivo).
+end note
+@enduml

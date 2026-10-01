@@ -1,0 +1,62 @@
+FIGURAS UML — módulo RabbitMQ (Atividade 01 U1) — Atualizado: 30/09/2026
+Fonte PlantUML (.puml) nesta pasta; PNG renderizado em uml/png/.
+
+01 implantacao containers.puml  -> png/01 implantacao containers.png
+   DIAGRAMA DE IMPLANTAÇÃO: host Docker, rede interna do compose, os 6 serviços
+   (cliente1/2, conversor1/2, storage1/2), as 4 pastas montadas (ro/rw) e a caixa
+   rabbitmq com fila.originais, exchange convertidas (fanout), fila storage.1 e
+   fila storage.2.
+
+02 componentes do binario.puml  -> png/02 componentes do binario.png
+   DIAGRAMA DE COMPONENTES: o binário único (Dockerfile multi-stage) com os
+   subcomandos cliente / conversor / storage e as dependências amqp (lapin),
+   io_imagem (crate image 0.25) e pasta_entrada/pasta_saida (env).
+
+03 sequencia fanout.puml        -> png/03 sequencia fanout.png
+   DIAGRAMA DE SEQUÊNCIA: publica -> entrega (prefetch 1) -> to_luma8 ->
+   publica no exchange -> basic_ack -> fanout copia para as duas filas de storage
+   -> grava com nome original. Nota final com a prova de redundância.
+
+04 classes dependencias.puml    -> png/04 classes dependencias.png
+   DIAGRAMA DE CLASSES (visão macro): app como base e cliente/conversor/storage
+   herdando; dependências para lapin, image 0.25 e rabbitmq.
+
+05 classes implementacao.puml   -> png/05 classes implementacao.png
+   DIAGRAMA DE CLASSES DE IMPLEMENTAÇÃO (visão de código): classes, campos e
+   assinaturas completas prontas para virar Rust.
+     main (bin)          -> papel_de(args) / construir(papel, cfg) / main()
+     Papel (enum)        -> Cliente | Conversor | Storage
+     Config (struct)     -> amqp_url, fila_originais, exchange_convertidas,
+                            fila_storage, pasta_entrada, pasta_saida, from_env()
+     Servico (trait)     -> executar(&mut self) -> Result<u64>
+     Cliente (struct)    -> cfg, canal, publicadas; novo(), executar(),
+                            listar_imagens(), publicar(nome, bytes)
+     Conversor (struct)  -> cfg, canal, processadas; novo(), executar(),
+                            tratar(payload, tag)
+     Storage (struct)    -> cfg, canal, salvas; novo(), executar(),
+                            salvar(nome, bytes) -> Result<PathBuf>
+     Mensagem (struct)   -> nome, bytes; escrever() -> Vec<u8>, ler(payload)
+     Topologia (struct)  -> fila_originais, exchange_convertidas, fila_storage;
+                            declarar(canal, papel), vincular(canal, fila, exchange)
+     modulos             -> amqp (conectar, propriedades_persistentes,
+                            prefetch_um), io_imagem (converter, extensao),
+                            relatorio, erro
+     crates externos     -> lapin::Channel, tokio, image 0.25, anyhow
+   Dependências (setas tracejadas) e três notas:
+     - ordem do tratar(): converter -> publish -> ack (at-least-once, sobrescreve
+       o mesmo nome, não duplica arquivo);
+     - declarar() por papel: durable=true, FANOUT, delivery_mode=PERSISTENT,
+       ack manual;
+     - payload sem dependência nova: 4 bytes big-endian com o tamanho do nome,
+       nome UTF-8, bytes da imagem (evita serde/base64).
+
+RENDER — comando usado (plantuml.jar em %LOCALAPPDATA%\Temp\puml):
+  cd uml && java -jar "$LOCALAPPDATA/Temp/puml/plantuml.jar" -tpng -charset UTF-8 -o png *.puml
+
+Rótulos sem acento de propósito: elimina risco de caractere quebrado na correção.
+Genéricos Rust (Result<u64>, Vec<u8>) foram testados no render: saem com os sinais
+< > corretos, não com entidades HTML.
+
+Verificação: as 5 imagens foram lidas e conferidas — sem texto cortado, sobreposto
+ou caixa fora da moldura. O PNG 05 foi re-renderizado a partir do .puml com md5
+idêntico, ou seja, não há render antigo no disco.

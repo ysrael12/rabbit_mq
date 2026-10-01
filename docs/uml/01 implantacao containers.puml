@@ -1,0 +1,84 @@
+@startuml
+' Gera: 01 implantacao containers.png
+skinparam shadowing false
+skinparam dpi 130
+skinparam defaultFontName "Segoe UI"
+skinparam defaultTextAlignment center
+skinparam nodesep 20
+skinparam ranksep 34
+skinparam arrowColor #45637F
+skinparam node {
+  BackgroundColor #EAF1FA
+  BorderColor #1F3B5C
+  FontColor #12314F
+}
+skinparam folder {
+  BackgroundColor #FFF7E6
+  BorderColor #B8860B
+  FontColor #6B4E00
+}
+skinparam artifact {
+  BackgroundColor #FDF0F0
+  BorderColor #B85450
+  FontColor #7B2E2A
+}
+skinparam port {
+  BackgroundColor #E1D5E7
+  BorderColor #9673A6
+}
+skinparam note {
+  BackgroundColor #FFF9E6
+  BorderColor #B8860B
+}
+
+title <size:17>Implantacao em containers Docker — modulo de conversao de imagens (RabbitMQ)</size>\n<size:12>Atividade 01 U1 — Sistemas Distribuidos (COMP0470)</size>
+
+node "Host Docker Engine\ndocker compose" as host {
+
+  folder "/pastas-cliente/cliente1\n<size:11>bind mount: ro</size>" as vc1
+  folder "/pastas-cliente/cliente2\n<size:11>bind mount: ro</size>" as vc2
+  folder "/pastas-storage/storage1\n<size:11>bind mount: rw</size>" as vs1
+  folder "/pastas-storage/storage2\n<size:11>bind mount: rw</size>" as vs2
+
+  node "rede interna do compose\nplanejamento_default" as net {
+
+    node "cliente1\n<size:11>app cliente</size>" as c1
+    node "cliente2\n<size:11>app cliente</size>" as c2
+    node "conversor1\n<size:11>app conversor</size>" as cv1
+    node "conversor2\n<size:11>app conversor</size>" as cv2
+    node "storage1\n<size:11>app storage</size>" as st1
+    node "storage2\n<size:11>app storage</size>" as st2
+
+    node "rabbitmq\n<size:11>imagem rabbitmq:management</size>\n<size:11>5672/tcp AMQP, 15672/tcp management</size>" as mq {
+      artifact "fila.originais\n<size:11>duravel, mensagem persistente</size>" as q1
+      artifact "exchange convertidas\n<size:11>tipo fanout</size>" as ex
+      artifact "fila storage.1" as qs1
+      artifact "fila storage.2" as qs2
+    }
+  }
+}
+
+c1 --> mq
+c2 --> mq
+cv1 --> mq
+cv2 --> mq
+st1 --> mq
+st2 --> mq
+
+c1 -[hidden]-> c2
+c2 -[hidden]-> cv1
+cv1 -[hidden]-> cv2
+cv2 -[hidden]-> st1
+st1 -[hidden]-> st2
+
+c1 .[#B8860B].> vc1
+c2 .[#B8860B].> vc2
+st1 .[#B8860B].> vs1
+st2 .[#B8860B].> vs2
+
+note bottom of mq
+  Todos os seis servicos falam AMQP com o broker
+  na porta interna 5672. As pastas do host entram nos
+  containers por bind mount, uma pasta por instancia.
+end note
+@enduml
