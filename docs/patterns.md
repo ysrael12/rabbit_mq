@@ -330,7 +330,7 @@ O código entregue **não** usa esta árvore: ele foi escrito em camadas
 (`src/modelos/` + `src/controladores/` + `src/main.rs`), o que foi mais rápido (menos pastas com
 um arquivo só, menos `mod.rs` para declarar). A árvore acima continua sendo a referência de
 leitura dos diagramas 6 a 11 — o custo do desvio é o nome do padrão não aparecer no caminho do
-arquivo. Mapa:
+arquivo. Mapa (1.114 linhas em 15 arquivos, `cargo test` passando):
 
 | Diagrama 06 | Código entregue |
 |---|---|
@@ -346,6 +346,27 @@ arquivo. Mapa:
 | `comportamento/command` | `controladores/invocador.rs` |
 | `comportamento/mediator` | `modelos/Topologia.rs` |
 | `comportamento/observer` | **não implementado** — `relatorio` é função livre, não observador |
+
+Vista da estrutura real: [`uml/12 codigo entregue.puml`](uml/12%20codigo%20entregue.puml).
+`cargo test`: 3 testes, sendo um o fluxo completo sobre broker em memória.
+
+Desvios entre desenho e código, com motivo:
+
+| Desenho | Código | Motivo |
+|---|---|---|
+| `FabricaServico::criar(cfg)` | `criar(papel, cfg)` | Sem o `Papel` seriam três fábricas, uma por papel |
+| `publicar_persistente(destino)` na porta | `publicar_na_fila` + `publicar_no_fanout` | Em AMQP são dois caminhos distintos (exchange default com routing key × fanout nomeado); um método só obrigaria a adivinhar o destino pelo nome |
+| Consumo abrindo a cada chamada | Consumidor guardado no `Broker` | Evita abrir um consumidor por imagem dentro do laço |
+| Gravação com o nome recebido | Só o componente final do nome | O nome vem pelo broker; descartar diretórios neutraliza um nome com `../` |
+
+### 5.2 O que falta
+
+`Dockerfile` multi-stage e `docker-compose.yml` (broker + cliente1/2 + conversor1/2 +
+storage1/2). Sem eles **não houve execução ponta a ponta com RabbitMQ real**; a evidência
+disponível é o teste de fluxo completo sobre um broker em memória
+(`controladores/criar.rs::testes::fluxo_completo_sem_broker`): prova que as duas réplicas recebem
+o mesmo arquivo, que a conversão é real (todos os pixels com canais iguais) e que nada ficou sem
+ack.
 
 ---
 

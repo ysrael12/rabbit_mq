@@ -1,0 +1,83 @@
+@startuml
+' Diagrama 12 — estrutura entregue (camadas) e correspondencia com os padroes
+skinparam shadowing false
+skinparam dpi 130
+skinparam defaultFontName "Segoe UI"
+skinparam defaultTextAlignment center
+skinparam arrowColor #2F4F6F
+skinparam packageStyle rectangle
+skinparam componentStyle rectangle
+skinparam noteBackgroundColor #FFF8DC
+skinparam noteBorderColor #B8860B
+skinparam package {
+  BackgroundColor #F3F6FA
+  BorderColor #2F4F6F
+  FontColor #1F3B5C
+}
+skinparam component {
+  BackgroundColor #FFFFFF
+  BorderColor #2F4F6F
+  FontColor #1F3B5C
+}
+
+title Estrutura entregue: duas camadas, nao uma pasta por padrao (diagrama 06 x codigo)
+
+package "main.rs" as MAIN {
+  component "args -> Papel -> Config\\ncriar(papel, cfg) -> Invocador::executar" as M
+}
+
+package "controladores/  (quem constroi e quem dispara)" as CTRL {
+  component "criar.rs  [Factory Method]\\nFabricaServico + FabricaReal\\nFabricaFalsa (teste, em memoria)" as CRIAR
+  component "invocador.rs  [Command]\\nservico : Box(dyn Servico)\\npedido : Papel" as INV
+}
+
+package "modelos/  (dominio + os padroes)" as MOD {
+  component "Config.rs\\nseis variaveis, um lugar" as CFG
+  component "Mensagem.rs\\n4 bytes BE + nome UTF-8 + bytes" as MSG
+  component "Topologia.rs  [Mediator]\\nnomes de fila e exchange, binds" as TOPO
+  component "Cliente.rs  [Strategy]\\npublica na fila.originais" as CLI
+  component "Conversor.rs  [Strategy]\\nconverte e publica no fanout" as CONV
+  component "Storage.rs  [Strategy]\\ngrava com o nome original" as STOR
+  component "utils.rs  [Template Method]\\ntrait Servico + executar()" as UTIL
+  component "Broker.rs + PortaBroker.rs  [Facade + porta]\\nunico arquivo que nomeia o lapin" as BRK
+  component "io_imagem.rs  [Adapter]\\ncrate image atras de converter(bytes)" as IMG
+}
+
+MAIN --> CRIAR : escolhe a familia
+MAIN --> INV : cria o comando
+CRIAR ..> CLI
+CRIAR ..> CONV
+CRIAR ..> STOR
+CLI ..> UTIL : implementa Servico
+CONV ..> UTIL : implementa Servico
+STOR ..> UTIL : implementa Servico
+CLI --> TOPO
+CONV --> TOPO
+STOR --> TOPO
+CLI --> BRK : PortaBroker
+CONV --> BRK : PortaBroker
+STOR --> BRK : PortaBroker
+CONV --> IMG : converter(bytes)
+CLI --> MSG
+CONV --> MSG
+STOR --> MSG
+CLI --> CFG
+CONV --> CFG
+STOR --> CFG
+INV ..> UTIL : Box(dyn Servico)
+
+note right of CTRL
+  Desvio consciente do diagrama 06: os arquivos ficam em camadas
+  (modelos/ + controladores/) em vez de nome da pasta = nome do
+  padrao. Menos pastas com um arquivo so e menos mod.rs; o custo
+  e o nome do padrao nao aparecer no caminho. Correspondencia
+  linha a linha na tabela ao lado.
+end note
+
+note bottom of MOD
+  Nao implementados: Decorator (passos Validar/MedirTempo/Reenviar)
+  e Observer (Evento/Assunto). O resumo numerico da execucao e uma
+  funcao livre, nao um observador. Ficam como extensao prevista:
+  o trait Passo e o Assunto existem no desenho 11, nao no codigo.
+end note
+@enduml

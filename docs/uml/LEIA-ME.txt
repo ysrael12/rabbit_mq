@@ -1,8 +1,9 @@
 FIGURAS UML — módulo RabbitMQ (Atividade 01 U1) — Atualizado: 30/09/2026
 Fonte PlantUML (.puml) nesta pasta; PNG renderizado em uml/png/.
 Duas famílias: 01-05 descrevem o SISTEMA (implantação, componentes, sequência,
-classes). 06-11 descrevem a IMPLEMENTAÇÃO, um recorte por padrão GoF, na mesma
-ordem da pasta src/ (categorias GoF).
+classes). 06-12 descrevem a IMPLEMENTAÇÃO: 06-11 são um recorte por padrão GoF,
+na mesma ordem da pasta src/ do diagrama original; 12 é a estrutura que foi de
+fato entregue (camadas) e a correspondência arquivo a arquivo.
 
 --- SISTEMA ---------------------------------------------------------------
 
@@ -91,6 +92,13 @@ ordem da pasta src/ (categorias GoF).
    MedirTempo, Reenviar) + Converter como base; Assunto/Evento/Observador para
    o resumo numérico da execução. O conversor não sabe quantas camadas tem
    por fora.
+
+12 codigo entregue.puml         -> png/12 codigo entregue.png
+   ESTRUTURA ENTREGUE (desenho x código): as duas camadas reais (modelos/ +
+   controladores/) e a correspondência entre cada arquivo e o padrão que ele
+   implementa. Notas: o desvio consciente do diagrama 06 (camadas em vez de
+   nome de pasta = padrão) e os dois padrões não implementados (Decorator,
+   Observer).
 
 RENDER — comando usado (plantuml.jar em %LOCALAPPDATA%\Temp\puml):
   cd docs/uml && java -jar "$LOCALAPPDATA/Temp/puml/plantuml.jar" -tpng -charset UTF-8 -o png *.puml

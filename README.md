@@ -7,9 +7,9 @@ mesmo nome do arquivo original.
 
 Trabalho da disciplina de Sistemas Distribuídos (COMP0470, UFS) — Atividade 01 U1.
 
-> Status: **modelagem concluída; implementação em andamento.** Este repositório nasce com os
-> diagramas, com o contrato de classes e com a organização em **padrões GoF** fechados antes do
-> código.
+> Status: **código implementado (`cargo test`: 3 testes passando); falta o empacotamento**
+> (`Dockerfile` + `docker-compose.yml`). Sem ele, não houve execução ponta a ponta com RabbitMQ
+> real — a evidência hoje é o teste de fluxo completo sobre um broker em memória.
 
 ---
 
@@ -84,14 +84,13 @@ garantir.
 | Já existe | Ainda não existe |
 |---|---|
 | `Cargo.toml` / `Cargo.lock` (edition 2024; `lapin`, `tokio`, `image`, `async-trait`, `futures-lite`) | `Dockerfile`, `docker-compose.yml` |
-| `src/modelos/` completo e `src/controladores/` (`criar` + `Invocador`) | `Observer` e `Decorator` (figura 11) |
-| `src/main.rs` ligado ao fluxo (`criar` → `Invocador::executar`) | prova ponta a ponta (`docker compose up`) |
+| `src/` completo: `modelos/` + `controladores/` (1.114 linhas, 15 arquivos) | `Observer` e `Decorator` (figura 11) |
+| 3 testes passando (`cargo test`), incluindo o fluxo completo sobre broker em memória | prova ponta a ponta (`docker compose up`) |
 | `docs/` com os diagramas e `patterns.md` | imagens de teste nas pastas |
 
-Próximo passo, na ordem do fluxo: `comum/config` → `comum/erro` → `estrutural/facade` →
-`estrutural/adapter` → `comportamento/strategy` → `comportamento/template_method` →
-`criacional/factory_method` → `comportamento/command` → `comportamento/mediator` →
-`comportamento/observer` → `estrutural/decorator`.
+Próximo passo: `Dockerfile` multi-stage → `docker-compose.yml` (rabbitmq + 6 serviços) → copiar
+algumas imagens para `pastas-cliente/cliente1` → `docker compose up --build -d` → conferir
+`md5sum` das duas pastas de storage.
 
 ## 3. Modelagem feita antes do código
 
@@ -119,6 +118,7 @@ Diagramas de implementação por padrão (as figuras 7 a 11 abaixo estão em
 | 9 | Mediator + Command — topologia e despacho | [`docs/uml/09 mediator e command.puml`](docs/uml/09%20mediator%20e%20command.puml) |
 | 10 | Facade + Adapter — a fronteira onde o `lapin` fica confinado | [`docs/uml/10 facade e adapter.puml`](docs/uml/10%20facade%20e%20adapter.puml) |
 | 11 | Decorator + Observer — empilhar comportamento sem editar o conversor | [`docs/uml/11 decorator e observer.puml`](docs/uml/11%20decorator%20e%20observer.puml) |
+| 12 | Estrutura entregue — as duas camadas e a correspondência arquivo ↔ padrão | [`docs/uml/12 codigo entregue.puml`](docs/uml/12%20codigo%20entregue.puml) |
 
 PNGs renderizados em [`docs/uml/png/`](docs/uml/png/). Para re-renderizar (precisa de Java +
 GraphViz `dot`):
@@ -163,6 +163,16 @@ Correspondência: o código ficou **em camadas** (`modelos/` + `controladores/`)
 
 ## 5. Como rodar
 
+**Hoje** (sem Docker, com o binário local — precisa de um RabbitMQ em `AMQP_URL`):
+
+```bash
+cargo run -- cliente      # publica pastas-cliente/cliente1 na fila.originais
+cargo run -- conversor    # consome, converte e publica no exchange convertidas
+cargo run -- storage      # consome a própria fila e grava com o nome original
+```
+
+**Projetado** (ainda não escrito — `Dockerfile` e `docker-compose.yml` são o que falta):
+
 ```bash
 docker compose up --build -d     # sobe broker, clientes, conversores e storages
 docker compose logs -f           # acompanha o processamento
@@ -174,7 +184,7 @@ bind mount por instância, por isso **não** se usa `--scale`):
 
 | Variável | Papel |
 |---|---|
-| `AMQP_URL` | endereço do broker (ex.: `amqp://guest:guest@rabbitmq:5672/%2f`) |
+| `AMQP_URL` | endereço do broker (ex.: `amqp://guest:***@rabbitmq:5672/%2f`) |
 | `FILA_ORIGINAIS` | nome da fila de entrada (`fila.originais`) |
 | `EXCHANGE_CONVERTIDAS` | exchange fanout (`convertidas`) |
 | `FILA_STORAGE` | fila de storage daquela instância (`fila.storage.1`, `fila.storage.2`) |
@@ -183,12 +193,17 @@ bind mount por instância, por isso **não** se usa `--scale`):
 
 ## 6. Verificação
 
-Log de terminal é indício, não prova. A prova é:
+Log de terminal é indício, não prova. O que roda hoje: `cargo test` — 3 testes, incluindo o fluxo
+completo (cliente → conversor → 2 storages) sobre um broker em memória, com asserções de que as
+duas réplicas têm conteúdo idêntico, que todo pixel de saída tem os três canais iguais e que nada
+ficou sem ack.
+
+Depois do empacotamento, a prova ponta a ponta é:
 
 ```bash
 ls pastas-storage/storage1 pastas-storage/storage2   # os mesmos nomes enviados pelo cliente
 md5sum pastas-storage/storage1/* pastas-storage/storage2/*   # hashes iguais = mesma imagem
 ```
 
-Mais os contadores de cada execução (Observer → resumo): quantas imagens entraram na fila e
-quantas cada storage gravou — número, não linha bonita de log.
+Mais os contadores de cada execução (`relatorio`, função livre — não há Observer no código):
+quantas imagens entraram na fila e quantas cada storage gravou — número, não linha bonita de log.
