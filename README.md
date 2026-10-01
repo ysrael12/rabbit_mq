@@ -54,20 +54,33 @@ Diagrama da arquitetura proposta: [`docs/arquitetura-proposta.png`](docs/arquite
 ### 2.1 Estado atual do código (ler antes de começar)
 
 ```bash
-cargo run                  # imprime "Hello, world!" — esqueleto apenas
+cargo run -- cliente      # publica a pasta de entrada
+cargo run -- conversor    # consome, converte e publica no fanout
+cargo run -- storage      # consome a própria fila e grava
 ```
 
-O `src/` está organizado por padrão (pastas criadas, arquivos ainda não escritos). O projeto
-**compila** mesmo com as pastas vazias: `Cargo.toml` é um binário simples e nenhum `mod` é
-declarado no `main.rs` ainda. O caminho é escrever os módulos e ir declarando cada um em
-`main.rs` (`mod comportamento::strategy::servico;` …), na ordem em que forem implementados.
+O `src/` foi implementado **em camadas**, não por padrão — desvio consciente do
+[`docs/uml/06 mapa de modulos por padrao.puml`](docs/uml/06%20mapa%20de%20modulos%20por%20padrao.puml).
+A árvore por padrão continua sendo a referência de leitura dos diagramas 6 a 11; a
+troca por camadas foi para andar mais rápido. Ver a tabela de correspondência em
+[`docs/patterns.md`](docs/patterns.md) §5.
+
+```mermaid
+flowchart LR
+    main["main.rs<br/>args, Papel, Config"] --> ctrl["controladores/<br/>criar — Factory Method<br/>Invocador — Command"]
+    ctrl --> mod["modelos/<br/>Cliente, Conversor, Storage — Strategy<br/>Topologia — Mediator<br/>Broker + PortaBroker — Facade<br/>io_imagem — Adapter<br/>utils — Template Method"]
+```
+
+Motivo: menos pastas com um arquivo só e menos `mod.rs` para declarar. Custo aceito: o nome do
+padrão deixa de aparecer no caminho do arquivo, que é justamente o que o diagrama 06 queria
+garantir.
 
 | Já existe | Ainda não existe |
 |---|---|
-| `Cargo.toml` / `Cargo.lock` (edition 2024, sem dependências) | dependências (`lapin`, `tokio`, `image`, `async-trait`) |
-| `src/main.rs` (hello world) | os módulos dos padrões |
-| árvore de pastas por padrão GoF + `.gitkeep` | `Dockerfile`, `docker-compose.yml` |
-| `docs/` com os 5 diagramas e `patterns.md` | imagens de teste nas pastas |
+| `Cargo.toml` / `Cargo.lock` (edition 2024; `lapin`, `tokio`, `image`, `async-trait`, `futures-lite`) | `Dockerfile`, `docker-compose.yml` |
+| `src/modelos/` completo e `src/controladores/` (`criar` + `Invocador`) | `Observer` e `Decorator` (figura 11) |
+| `src/main.rs` ligado ao fluxo (`criar` → `Invocador::executar`) | prova ponta a ponta (`docker compose up`) |
+| `docs/` com os diagramas e `patterns.md` | imagens de teste nas pastas |
 
 Próximo passo, na ordem do fluxo: `comum/config` → `comum/erro` → `estrutural/facade` →
 `estrutural/adapter` → `comportamento/strategy` → `comportamento/template_method` →
@@ -144,45 +157,37 @@ Documento completo, com o código de cada padrão e o motivo de cada escolha:
 
 ## 5. Estrutura do repositório
 
-```
-rabbit_mq/
-├── README.md
-├── docs/
-│   ├── patterns.md                # os padrões GoF, com código e justificativa
-│   ├── arquitetura-proposta.png
-│   └── uml/                       # fontes PlantUML + PNG das 5 figuras
-├── Cargo.toml                     # binário único "rabbit_mq" (edition 2024)
-├── Dockerfile                     # multi-stage: rust:slim (build) → debian slim (runtime)
-├── docker-compose.yml             # rabbitmq + cliente1/2 + conversor1/2 + storage1/2
-├── src/
-│   ├── main.rs                    # args → Config → Comando (Factory Method) → executar
-│   ├── comum/
-│   │   ├── config/                # Config::from_env
-│   │   ├── mensagem/              # payload: 4 bytes BE com tamanho do nome + nome UTF-8 + bytes
-│   │   ├── erro/                  # Res<T>
-│   │   └── relatorio/             # formatação do resumo da execução
-│   ├── criacional/
-│   │   └── factory_method/        # FabricaServico + criar(Papel, Config)
-│   ├── estrutural/
-│   │   ├── facade/                # Broker: fachada do lapin
-│   │   ├── adapter/               # io_imagem (crate image) + lapin_adapter
-│   │   └── decorator/             # Passo + Validar / MedirTempo / Reenviar
-│   └── comportamento/
-│       ├── strategy/              # trait Servico + Cliente / Conversor / Storage
-│       ├── template_method/       # Servico::executar — esqueleto do laço
-│       ├── command/               # Pedido, Comando, Invocador
-│       ├── observer/              # Evento, Observador, Assunto
-│       └── mediator/              # Topologia (filas, exchange, binds)
-├── pastas-cliente/
-│   ├── cliente1/                  # imagens que o cliente1 publica
-│   └── cliente2/
-└── pastas-storage/
-    ├── storage1/                  # destino do storage1 (bind mount rw)
-    └── storage2/
+```mermaid
+graph TD
+    raiz["rabbit_mq/"]
+    raiz --> md["README.md"]
+    raiz --> docs["docs/"]
+    docs --> pat["patterns.md — os padrões GoF, com código e justificativa"]
+    docs --> png["arquitetura-proposta.png"]
+    docs --> uml["uml/ — fontes PlantUML + PNG das figuras"]
+    raiz --> cargo["Cargo.toml — binário único rabbit_mq, edition 2024"]
+    raiz --> dockerfile["Dockerfile — multi-stage: rust:slim build, debian slim runtime"]
+    raiz --> compose["docker-compose.yml — rabbitmq + cliente1/2 + conversor1/2 + storage1/2"]
+    raiz --> src["src/"]
+    src --> main["main.rs — args, Papel, Config, criar, Invocador.executar"]
+    src --> modelos["modelos/ — domínio + os padrões, desvio do diagrama 06, ver §2.1"]
+    modelos --> cfg["Config.rs — Config.from_env"]
+    modelos --> msg["Mensagem.rs — 4 bytes BE com o tamanho do nome + nome UTF-8 + bytes"]
+    modelos --> topo["Topologia.rs — Mediator: filas, exchange, binds"]
+    modelos --> serv["Cliente.rs, Conversor.rs, Storage.rs — Strategy"]
+    modelos --> fac["Broker.rs + PortaBroker.rs — Facade e a porta"]
+    modelos --> adap["io_imagem.rs — Adapter do crate image"]
+    modelos --> utils["utils.rs — Papel, Res, relatorio, trait Servico + Template Method"]
+    src --> ctrl["controladores/"]
+    ctrl --> criar["criar.rs — Factory Method, FabricaReal e FabricaFalsa"]
+    ctrl --> inv["invocador.rs — Command"]
+    raiz --> pc["pastas-cliente/ — cliente1 e cliente2, bind mount ro"]
+    raiz --> ps["pastas-storage/ — storage1 e storage2, bind mount rw"]
 ```
 
-Correspondência: **nome da pasta = nome do padrão**, para que a intenção apareça no caminho do
-arquivo. Cada pasta tem seu `mod.rs`/arquivo do padrão, declarado em `main.rs`.
+Correspondência: o código ficou **em camadas** (`modelos/` + `controladores/`), e não com
+**nome da pasta = nome do padrão** como o diagrama 06 pede — o mapa padrão ↔ arquivo está em
+[`docs/patterns.md`](docs/patterns.md) §5.1.
 
 ## 6. Como rodar
 

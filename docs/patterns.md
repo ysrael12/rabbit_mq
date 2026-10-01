@@ -25,6 +25,10 @@ nunca "que padrão eu poderia encaixar".
 
 ### Onde a redundância entra, agora sem padrão de integração
 
+> **Desvio consciente.** Os caminhos da coluna *Onde entra* são os do diagrama 06. O código foi
+> escrito **em camadas** (`src/modelos/` + `src/controladores/`) para andar mais rápido; a
+> correspondência padrão ↔ arquivo está em §5.
+
 A cópia da mensagem para todas as filas de armazenamento é **configuração do broker**, não código
 nosso: exchange `convertidas` do tipo `fanout` com uma fila por réplica fazendo bind nele. O
 RabbitMQ copia para todos os binds; a aplicação não tem uma linha de roteamento.
@@ -319,6 +323,29 @@ src/
 Correspondência pasta ↔ módulo Rust: cada pasta tem seu `mod.rs` (ou o arquivo do padrão) e o
 `main.rs` declara `mod criacional::factory_method;` etc. O nome da pasta é o nome do padrão,
 para que a intenção apareça na primeira linha de um caminho de arquivo.
+
+### 5.1 O que foi implementado, e onde
+
+O código entregue **não** usa esta árvore: ele foi escrito em camadas
+(`src/modelos/` + `src/controladores/` + `src/main.rs`), o que foi mais rápido (menos pastas com
+um arquivo só, menos `mod.rs` para declarar). A árvore acima continua sendo a referência de
+leitura dos diagramas 6 a 11 — o custo do desvio é o nome do padrão não aparecer no caminho do
+arquivo. Mapa:
+
+| Diagrama 06 | Código entregue |
+|---|---|
+| `comum/config` | `modelos/Config.rs` |
+| `comum/mensagem` | `modelos/Mensagem.rs` |
+| `comum/erro`, `comum/relatorio` | `modelos/utils.rs` (`Res<T>`, `relatorio`) |
+| `criacional/factory_method` | `controladores/criar.rs` (`FabricaServico`, `FabricaReal`, `FabricaFalsa`) |
+| `estrutural/facade` | `modelos/Broker.rs` + `modelos/PortaBroker.rs` |
+| `estrutural/adapter` | `modelos/io_imagem.rs` |
+| `estrutural/decorator` | **não implementado** (figura 11) |
+| `comportamento/strategy` | `modelos/utils.rs` (`trait Servico`) + `Cliente.rs` / `Conversor.rs` / `Storage.rs` |
+| `comportamento/template_method` | `modelos/utils.rs` (`Servico::executar`) |
+| `comportamento/command` | `controladores/invocador.rs` |
+| `comportamento/mediator` | `modelos/Topologia.rs` |
+| `comportamento/observer` | **não implementado** — `relatorio` é função livre, não observador |
 
 ---
 
