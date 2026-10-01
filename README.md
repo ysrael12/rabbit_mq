@@ -27,12 +27,18 @@ Trabalho da disciplina de Sistemas Distribuídos (COMP0470, UFS) — Atividade 0
 
 ## 2. Arquitetura
 
-```
-clientes ──▶ fila.originais ──▶ conversores ──▶ exchange convertidas (fanout)
-                                                     │        │
-                                              fila storage.1  fila storage.2
-                                                     │        │
-                                                 storage1   storage2
+```mermaid
+flowchart LR
+    c1["cliente1"] --> fila["fila.originais<br/>durável, mensagem persistente"]
+    c2["cliente2"] --> fila
+    fila --> cv1["conversor1"]
+    fila --> cv2["conversor2"]
+    cv1 --> ex["exchange convertidas<br/>fanout"]
+    cv2 --> ex
+    ex --> qs1["fila storage.1"]
+    ex --> qs2["fila storage.2"]
+    qs1 --> st1["storage1"]
+    qs2 --> st2["storage2"]
 ```
 
 Duas decisões sustentam os requisitos R4 e R5:
