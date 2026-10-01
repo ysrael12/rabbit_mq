@@ -1,0 +1,151 @@
+# =============================================================================
+# docker-compose.yml — broker + os seis serviços (figura 01 do docs/uml)
+# -----------------------------------------------------------------------------
+# Um único binário (`rabbit_mq <papel>`) vira seis containers com parâmetros
+# diferentes. Não usamos `--scale`: cada instância tem o SEU bind mount (uma
+# pasta por instância no diagrama 01), então cada serviço é declarado à mão.
+#
+# Fluxo: cliente1/2 -> fila.originais -> conversor1/2 -> exchange "convertidas"
+#        (fanout) -> fila.storage.1/2 -> storage1/2 (R4/R5)
+# =============================================================================
+
+name: planejamento   # nome do projeto => rede "planejamento_default" (diagrama 01)
+
+# --- âncoras YAML: evitam repetir as mesmas linhas em 6 serviços -------------
+# `x-` é a convenção do Compose para campos de extensão (não viram serviços).
+# `&nome` cria a âncora; `*nome` reusa; `<<: *nome` mescla num mapa.
+x-ambiente-base: &ambiente-base
+  AMQP_URL: "amqp://rabbit:rabbit@rabbitmq:5672/%2f"   # vhost "/" = %2f
+  FILA_ORIGINAIS: "fila.originais"
+  EXCHANGE_CONVERTIDAS: "convertidas"
+
+x-app-base: &app-base
+  build: .
+  image: rabbit_mq:local            # build 1x, a mesma imagem serve os 6
+  user: "${UID:-1000}:${GID:-1000}" # uid do dono das pastas (ver storage1)
+  restart: on-failure
+
+services:
+  # ---------------------------------------------------------------------------
+  # Broker — imagem oficial com o painel de gestão.
+  # ---------------------------------------------------------------------------
+  rabbitmq:
+    image: rabbitmq:4.0-management   # pin major.minor: reprodutibilidade
+    ports:
+      - "5672:5672"    # AMQP — exposto p/ um `cargo run` local fora do compose
+      - "15672:15672"  # painel: http://localhost:15672 (rabbit/rabbit)
+    environment:
+      # `guest` só conecta por loopback no RabbitMQ 3.3+; os containers chegam
+      # pela rede do compose, então criamos um usuário dedicado (sem a
+      # restrição de loopback). É o que faz o AMQP_URL acima funcionar.
+      RABBITMQ_DEFAULT_USER: rabbit
+      RABBITMQ_DEFAULT_PASS: rabbit
+    healthcheck:
+      # "ping" só passa com o nó de pé — evita os serviços subirem antes do
+      # broker e morrerem com "connection refused".
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s   # o RabbitMQ demora ~15-30s na primeira subida
+    restart: unless-stopped   # daemon de longa duração
+
+  # ---------------------------------------------------------------------------
+  # storage1 / storage2 — consomem a própria fila e gravam com o nome original.
+  # Sobem ANTES de clientes/conversores (os outros dependem deles) porque é o
+  # bind (fila.storage.N <- exchange) que faz o fanout copiar; sem bind na hora
+  # da publicação, o fanout descarta a mensagem.
+  # ---------------------------------------------------------------------------
+  storage1:
+    <<: *app-base
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      <<: *ambiente-base
+      FILA_STORAGE: "fila.storage.1"
+      PASTA_SAIDA: "/saida"
+    volumes:
+      - ./pastas-storage/storage1:/saida   # rw (padrão) — diagrama 01
+    # `user:` roda o processo com o uid/gid do dono das pastas do host: bind
+    # mount não remapeia usuário, e o storage precisa ESCREVER em
+    # ./pastas-storage/... (o USER do Dockerfile é o fallback p/ docker run).
+    command: ["storage"]
+
+  storage2:
+    <<: *app-base
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      <<: *ambiente-base
+      FILA_STORAGE: "fila.storage.2"
+      PASTA_SAIDA: "/saida"
+    volumes:
+      - ./pastas-storage/storage2:/saida
+    command: ["storage"]
+
+  # ---------------------------------------------------------------------------
+  # cliente1 / cliente2 — leem a própria pasta (ro) e publicam uma vez.
+  # ---------------------------------------------------------------------------
+  cliente1:
+    <<: *app-base
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      storage1:
+        condition: service_started   # storages primeiro => bind antes do fanout
+      storage2:
+        condition: service_started
+    environment:
+      <<: *ambiente-base
+      PASTA_ENTRADA: "/entrada"
+    volumes:
+      - ./pastas-cliente/cliente1:/entrada:ro   # ro: cliente só lê
+    command: ["cliente"]
+    # restart: on-failure (herdado) é o certo: o cliente é one-shot (sai 0
+    # depois de publicar), reinicia só se errar (ex.: broker fora do ar).
+
+  cliente2:
+    <<: *app-base
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      storage1:
+        condition: service_started
+      storage2:
+        condition: service_started
+    environment:
+      <<: *ambiente-base
+      PASTA_ENTRADA: "/entrada"
+    volumes:
+      - ./pastas-cliente/cliente2:/entrada:ro
+    command: ["cliente"]
+
+  # ---------------------------------------------------------------------------
+  # conversor1 / conversor2 — consomem fila.originais e publicam no fanout.
+  # Sem bind mount: o conversor não lê nem grava arquivo (só memória/AMQP).
+  # ---------------------------------------------------------------------------
+  conversor1:
+    <<: *app-base
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      storage1:
+        condition: service_started
+      storage2:
+        condition: service_started
+    environment: *ambiente-base
+    command: ["conversor"]
+
+  conversor2:
+    <<: *app-base
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      storage1:
+        condition: service_started
+      storage2:
+        condition: service_started
+    environment: *ambiente-base
+    command: ["conversor"]

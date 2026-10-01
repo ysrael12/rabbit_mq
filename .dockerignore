@@ -1,0 +1,24 @@
+# Contexto de build: só o que a imagem precisa (Cargo.toml, Cargo.lock, src/).
+# Tudo abaixo fica fora do contexto enviado ao daemon — build mais rápido e
+# sem vazar arquivos locais para dentro da imagem.
+
+# artefato local de build (pode ser gigante)
+target/
+
+# a imagem não precisa de git, docs nem README
+.git/
+.gitignore
+docs/
+README.md
+
+# as pastas de imagens entram por bind mount em tempo de execução (diagrama
+# 01), nunca são copiadas para dentro da imagem
+pastas-cliente/
+pastas-storage/
+
+# editor / SO / artefatos
+.vscode/
+.idea/
+.DS_Store
+*.log
+*.tar

@@ -7,9 +7,9 @@ mesmo nome do arquivo original.
 
 Trabalho da disciplina de Sistemas Distribuídos (COMP0470, UFS) — Atividade 01 U1.
 
-> Status: **código implementado (`cargo test`: 3 testes passando); falta o empacotamento**
-> (`Dockerfile` + `docker-compose.yml`). Sem ele, não houve execução ponta a ponta com RabbitMQ
-> real — a evidência hoje é o teste de fluxo completo sobre um broker em memória.
+> Status: **código implementado (`cargo test`: 3 testes passando) e empacotado** — `Dockerfile`
+> multi-stage + `docker-compose.yml` (broker + 6 serviços), com execução ponta a ponta verificada
+> com `md5sum` nas duas réplicas (§6). Falta só o `Observer` e o `Decorator` (figura 11).
 
 ---
 
@@ -83,14 +83,16 @@ garantir.
 
 | Já existe | Ainda não existe |
 |---|---|
-| `Cargo.toml` / `Cargo.lock` (edition 2024; `lapin`, `tokio`, `image`, `async-trait`, `futures-lite`) | `Dockerfile`, `docker-compose.yml` |
-| `src/` completo: `modelos/` + `controladores/` (1.114 linhas, 15 arquivos) | `Observer` e `Decorator` (figura 11) |
-| 3 testes passando (`cargo test`), incluindo o fluxo completo sobre broker em memória | prova ponta a ponta (`docker compose up`) |
-| `docs/` com os diagramas e `patterns.md` | imagens de teste nas pastas |
+| `Cargo.toml` / `Cargo.lock` (edition 2024; `lapin`, `tokio`, `image`, `async-trait`, `futures-lite`) | `Observer` e `Decorator` (figura 11) |
+| `src/` completo: `modelos/` + `controladores/` (1.114 linhas, 15 arquivos) | imagens de teste nas pastas |
+| 3 testes passando (`cargo test`), incluindo o fluxo completo sobre broker em memória |  |
+| `docs/` com os diagramas e `patterns.md` |  |
+| `Dockerfile` (multi-stage), `.dockerignore` e `docker-compose.yml` (broker + 6 serviços) |  |
+| prova ponta a ponta (`docker compose up`) verificada com `md5sum` nas duas réplicas |  |
 
-Próximo passo: `Dockerfile` multi-stage → `docker-compose.yml` (rabbitmq + 6 serviços) → copiar
-algumas imagens para `pastas-cliente/cliente1` → `docker compose up --build -d` → conferir
-`md5sum` das duas pastas de storage.
+Do mapa de padrões, o que falta é a figura 11: `Observer` (resumo numérico por evento) e
+`Decorator` (empilhar comportamento sem editar o conversor) — ver
+[`docs/patterns.md`](docs/patterns.md).
 
 ## 3. Modelagem feita antes do código
 
@@ -138,7 +140,8 @@ graph TD
     docs --> png["arquitetura-proposta.png"]
     docs --> uml["uml/ — fontes PlantUML + PNG das figuras"]
     raiz --> cargo["Cargo.toml — binário único rabbit_mq, edition 2024"]
-    raiz --> dockerfile["Dockerfile — multi-stage: rust:slim build, debian slim runtime"]
+    raiz --> dockerfile["Dockerfile — multi-stage: rust:1.98-slim build, debian:trixie-slim runtime"]
+    raiz --> di[".dockerignore — contexto de build enxuto"]
     raiz --> compose["docker-compose.yml — rabbitmq + cliente1/2 + conversor1/2 + storage1/2"]
     raiz --> src["src/"]
     src --> main["main.rs — args, Papel, Config, criar, Invocador.executar"]
@@ -163,15 +166,7 @@ Correspondência: o código ficou **em camadas** (`modelos/` + `controladores/`)
 
 ## 5. Como rodar
 
-**Hoje** (sem Docker, com o binário local — precisa de um RabbitMQ em `AMQP_URL`):
-
-```bash
-cargo run -- cliente      # publica pastas-cliente/cliente1 na fila.originais
-cargo run -- conversor    # consome, converte e publica no exchange convertidas
-cargo run -- storage      # consome a própria fila e grava com o nome original
-```
-
-**Projetado** (ainda não escrito — `Dockerfile` e `docker-compose.yml` são o que falta):
+**Com Docker** (o caminho principal — `docker-compose.yml` sobe o broker e os seis serviços):
 
 ```bash
 docker compose up --build -d     # sobe broker, clientes, conversores e storages
@@ -179,17 +174,40 @@ docker compose logs -f           # acompanha o processamento
 docker compose down              # derruba o ambiente
 ```
 
+**Sem Docker** (binário local — precisa de um RabbitMQ em `AMQP_URL`):
+
+```bash
+cargo run -- cliente      # publica pastas-cliente/cliente1 na fila.originais
+cargo run -- conversor    # consome, converte e publica no exchange convertidas
+cargo run -- storage      # consome a própria fila e grava com o nome original
+```
+
 Configuração por variável de ambiente, um serviço por instância (a pasta de entrada/saída é um
 bind mount por instância, por isso **não** se usa `--scale`):
 
 | Variável | Papel |
 |---|---|
-| `AMQP_URL` | endereço do broker (ex.: `amqp://guest:***@rabbitmq:5672/%2f`) |
+| `AMQP_URL` | endereço do broker (ex.: `amqp://rabbit:rabbit@rabbitmq:5672/%2f`) |
 | `FILA_ORIGINAIS` | nome da fila de entrada (`fila.originais`) |
 | `EXCHANGE_CONVERTIDAS` | exchange fanout (`convertidas`) |
 | `FILA_STORAGE` | fila de storage daquela instância (`fila.storage.1`, `fila.storage.2`) |
 | `PASTA_ENTRADA` | pasta lida pelo cliente |
 | `PASTA_SAIDA` | pasta gravada pelo storage |
+
+> O broker sobe com usuário dedicado `rabbit`/`rabbit` (`RABBITMQ_DEFAULT_USER`), não `guest`:
+> no RabbitMQ 3.3+ o `guest` só aceita conexão local (loopback), então os containers do
+> compose não autenticariam com `amqp://guest:guest@...`. A rede é `planejamento_default`
+> (diagrama 01) e cada instância tem o seu bind mount (por isso não há `--scale`).
+
+**Fluxo de uso** — o cliente é *one-shot*: lê a pasta **uma vez** na subida e encerra (exit 0),
+enquanto conversores e storages ficam consumindo. Por isso:
+
+1. Coloque as imagens em `pastas-cliente/cliente1/` e `pastas-cliente/cliente2/` **antes** de subir.
+2. `docker compose up -d` — sobe, processa tudo e os clientes saem com o total publicado.
+3. Para processar **mais** imagens adicionadas depois, re-dispara os clientes que já saíram:
+   `docker compose up -d` (reinicia os encerrados) ou `docker compose start cliente1 cliente2`.
+
+Painel de gestão: http://localhost:15672 (`rabbit`/`rabbit`).
 
 ## 6. Verificação
 
@@ -207,3 +225,6 @@ md5sum pastas-storage/storage1/* pastas-storage/storage2/*   # hashes iguais = m
 
 Mais os contadores de cada execução (`relatorio`, função livre — não há Observer no código):
 quantas imagens entraram na fila e quantas cada storage gravou — número, não linha bonita de log.
+
+> Já executado: as 11 imagens de [`docs/uml/png/`](docs/uml/png/) passaram ponta a ponta —
+> `storage1` e `storage2` terminaram com os mesmos nomes e `md5sum` idêntico, em tons de cinza.
