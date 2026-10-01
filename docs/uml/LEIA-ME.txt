@@ -1,5 +1,10 @@
 FIGURAS UML — módulo RabbitMQ (Atividade 01 U1) — Atualizado: 30/09/2026
 Fonte PlantUML (.puml) nesta pasta; PNG renderizado em uml/png/.
+Duas famílias: 01-05 descrevem o SISTEMA (implantação, componentes, sequência,
+classes). 06-11 descrevem a IMPLEMENTAÇÃO, um recorte por padrão GoF, na mesma
+ordem da pasta src/ (categorias GoF).
+
+--- SISTEMA ---------------------------------------------------------------
 
 01 implantacao containers.puml  -> png/01 implantacao containers.png
    DIAGRAMA DE IMPLANTAÇÃO: host Docker, rede interna do compose, os 6 serviços
@@ -50,13 +55,51 @@ Fonte PlantUML (.puml) nesta pasta; PNG renderizado em uml/png/.
      - payload sem dependência nova: 4 bytes big-endian com o tamanho do nome,
        nome UTF-8, bytes da imagem (evita serde/base64).
 
+--- IMPLEMENTAÇÃO (um diagrama por padrão) --------------------------------
+
+06 mapa de modulos por padrao.puml -> png/06 mapa de modulos por padrao.png
+   MAPA DE MÓDULOS: o conteúdo de src/ e as arestas de dependência entre os
+   padrões. responde "o que importa o quê" antes de existir código. Regra
+   visível: a seta nunca volta para a categoria comum; comum nao depende de
+   ninguem.
+
+07 factory method.puml          -> png/07 factory method.png
+   criacional/factory_method: fn criar(papel, cfg) escolhe a família de
+   implementações. FabricaServico (trait) + FabricaReal + FabricaFalsa
+   (teste, sem broker). main so conhece Papel e o trait Servico.
+
+08 strategy e template method.puml -> png/08 strategy e template method.png
+   comportamento/strategy + template_method: trait Servico com executar()
+   NÃO reescrito, e os passos preparar -> (receber -> passo -> confirmar) em
+   laço -> resumo, que cada papel sobrescreve. Cliente/Conversor/Storage
+   apontam para o mesmo contrato.
+
+09 mediator e command.puml      -> png/09 mediator e command.png
+   comportamento/mediator + command: Topologia (declarar/vincular) como ponto
+   único dos nomes de fila/exchange; Invocador guarda Box<dyn Servico> e chama
+   executar(). Nenhum módulo escreve nome de fila literal.
+
+10 facade e adapter.puml        -> png/10 facade e adapter.png
+   estrutural/facade + adapter: Broker esconde lapin (conectar, publicar
+   persistente, consumir, ack); io_imagem esconde a crate image
+   (converter(bytes) -> Result<Vec<u8>>). As duas fronteiras do projeto:
+   trocar broker ou trocar de crate mexe em um arquivo só.
+
+11 decorator e observer.puml    -> png/11 decorator e observer.png
+   estrutural/decorator + comportamento/observer: trait Passo com
+   tratar(corpo) -> Result<Vec<u8>>, três decoradores genéricos (Validar,
+   MedirTempo, Reenviar) + Converter como base; Assunto/Evento/Observador para
+   o resumo numérico da execução. O conversor não sabe quantas camadas tem
+   por fora.
+
 RENDER — comando usado (plantuml.jar em %LOCALAPPDATA%\Temp\puml):
-  cd uml && java -jar "$LOCALAPPDATA/Temp/puml/plantuml.jar" -tpng -charset UTF-8 -o png *.puml
+  cd docs/uml && java -jar "$LOCALAPPDATA/Temp/puml/plantuml.jar" -tpng -charset UTF-8 -o png *.puml
 
 Rótulos sem acento de propósito: elimina risco de caractere quebrado na correção.
-Genéricos Rust (Result<u64>, Vec<u8>) foram testados no render: saem com os sinais
-< > corretos, não com entidades HTML.
+Genéricos Rust (Result<u64>, Vec<u8>, Box<dyn Servico>, Vec<Box<dyn Observador>>)
+foram testados no render: saem com os sinais < > corretos, não com entidades HTML
+nem colchetes.
 
-Verificação: as 5 imagens foram lidas e conferidas — sem texto cortado, sobreposto
-ou caixa fora da moldura. O PNG 05 foi re-renderizado a partir do .puml com md5
-idêntico, ou seja, não há render antigo no disco.
+Verificação: as 11 imagens foram lidas e conferidas — sem texto cortado,
+sobreposto ou caixa fora da moldura. O PNG 05 foi re-renderizado a partir do
+.puml com md5 idêntico, ou seja, não há render antigo no disco.

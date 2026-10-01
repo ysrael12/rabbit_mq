@@ -1,0 +1,88 @@
+@startuml
+' Diagrama 07 — criacional/factory_method
+skinparam shadowing false
+skinparam dpi 130
+skinparam defaultFontName "Segoe UI"
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #EAF1FA
+  BorderColor #1F3B5C
+  FontColor #12314F
+  AttributeFontSize 12
+  AttributeFontColor #33475B
+}
+skinparam note {
+  BackgroundColor #FFF9E6
+  BorderColor #B8860B
+}
+hide circle
+hide empty members
+
+title <size:17>criacional/factory_method — quem sabe construir cada servico</size>
+
+class "main" as MAIN <<bin>> {
+  - papel_de(args: Vec<String>) : Papel
+  + main() : Res<()>
+}
+
+enum "Papel" as PAPEL {
+  Cliente
+  Conversor
+  Storage
+}
+
+interface "FabricaServico" as FS <<trait>> {
+  + criar(&self, cfg: Config) : Res<Box<dyn Servico>>
+}
+
+class "FabricaReal" as FR <<struct>> {
+  + criar(&self, cfg: Config) : Res<Box<dyn Servico>>
+}
+
+class "FabricaFalsa" as FF <<struct>> {
+  + criar(&self, cfg: Config) : Res<Box<dyn Servico>>
+}
+
+class "fn criar" as FN <<funcao livre>> {
+  + criar(papel: Papel, cfg: Config) : Res<Box<dyn Servico>>
+}
+
+interface "Servico" as SERV <<trait>> {
+  + executar(&mut self) : Res<u64>
+}
+
+class "Cliente" as CLI <<struct>>
+class "Conversor" as CONV <<struct>>
+class "Storage" as STOR <<struct>>
+
+MAIN ..> PAPEL : le o argumento
+MAIN ..> FN : chama
+MAIN ..> CFG <<comum/config>>
+
+FN ..> FR : forma simples do padrao
+FN ..> FF : substituicao em teste
+FR ..|> FS
+FF ..|> FS
+
+FS ..> SERV : cria
+FR ..> CLI
+FR ..> CONV
+FR ..> STOR
+FF ..> SERV : portas falsas, sem broker
+
+CLI ..|> SERV
+CONV ..|> SERV
+STOR ..|> SERV
+
+note right of FS
+  O trait existe para permitir a segunda familia:
+  fabrica real (lapin + image) e fabrica de teste
+  (adaptadores falsos, sem broker e sem crate de imagem).
+end note
+
+note bottom of MAIN
+  main tem uma linha de criacao. Se ela tambem soubesse
+  montar conexao, topologia e observadores de cada papel,
+  seria o arquivo mais complexo do projeto.
+end note
+@enduml

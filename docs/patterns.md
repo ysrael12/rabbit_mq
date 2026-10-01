@@ -38,6 +38,21 @@ Pela mesma razão, entrega durável (`durable`, `delivery_mode=PERSISTENT`) e co
 (`prefetch 1` + ack depois do trabalho) são **configuração da conexão e do consumo**, não um
 padrão a mais no diagrama.
 
+### Diagramas de implementação
+
+Cada recorte tem o seu próprio diagrama (fonte PlantUML + PNG em `docs/uml/`):
+
+| Figura | Diagrama | Arquivo |
+|---|---|---|
+| 06 | Mapa de módulos de `src/` e dependências entre os padrões | [`06 mapa de modulos por padrao.puml`](uml/06%20mapa%20de%20modulos%20por%20padrao.puml) |
+| 07 | Factory Method — quem constrói cada serviço | [`07 factory method.puml`](uml/07%20factory%20method.puml) |
+| 08 | Strategy + Template Method — o contrato dos três papéis | [`08 strategy e template method.puml`](uml/08%20strategy%20e%20template%20method.puml) |
+| 09 | Mediator + Command — topologia e despacho | [`09 mediator e command.puml`](uml/09%20mediator%20e%20command.puml) |
+| 10 | Facade + Adapter — a fronteira onde o `lapin` fica confinado | [`10 facade e adapter.puml`](uml/10%20facade%20e%20adapter.puml) |
+| 11 | Decorator + Observer — empilhar comportamento sem editar o conversor | [`11 decorator e observer.puml`](uml/11%20decorator%20e%20observer.puml) |
+
+PNGs em [`uml/png/`](uml/png/). Re-render: `java -jar plantuml.jar -tpng -charset UTF-8 -o png docs/uml/*.puml`.
+
 ---
 
 ## 2. Padrões estruturais

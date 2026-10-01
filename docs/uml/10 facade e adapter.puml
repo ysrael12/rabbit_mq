@@ -1,0 +1,96 @@
+@startuml
+' Diagrama 10 — estrutural/facade + adapter
+skinparam shadowing false
+skinparam dpi 130
+skinparam defaultFontName "Segoe UI"
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #EAF1FA
+  BorderColor #1F3B5C
+  FontColor #12314F
+  AttributeFontSize 12
+  AttributeFontColor #33475B
+}
+skinparam note {
+  BackgroundColor #FFF9E6
+  BorderColor #B8860B
+}
+hide circle
+hide empty members
+
+title <size:17>estrutural/facade + adapter — a fronteira onde o lapin fica confinado</size>
+
+package "estrutural/facade" {
+  class "Broker" as BRK <<fachada>> {
+    - canal : Channel
+    - cfg : Config
+    + conectar(cfg: &Config) : Res<Broker>
+    + declarar_fila(nome: &str) : Res<()>
+    + declarar_fanout(nome: &str) : Res<()>
+    + vincular(fila: &str, exchange: &str) : Res<()>
+    + definir_prefetch(n: u16) : Res<()>
+    + publicar_persistente(destino: &str, corpo: &[u8]) : Res<()>
+    + consumir(fila: &str) : Res<Vec<Mensagem>>
+    + confirmar(tag: u64) : Res<()>
+  }
+}
+
+package "estrutural/adapter" {
+  class "lapin_adapter" as LA <<adaptador>> {
+    + implementa as operacoes do Broker
+    + delivery_mode = PERSISTENT embutido
+    + prefetch = 1 usado pelo consumo
+  }
+  class "io_imagem" as IOM <<adaptador>> {
+    + converter(bytes: Vec<u8>) : Res<Vec(u8)>
+    + extensao(nome: &str) : Option<String>
+  }
+}
+
+interface "PortaBroker" as PB <<porta>> {
+  + declarar_fila(nome: &str) : Res<()>
+  + declarar_fanout(nome: &str) : Res<()>
+  + vincular(fila: &str, exchange: &str) : Res<()>
+  + definir_prefetch(n: u16) : Res<()>
+  + publicar_persistente(destino: &str, corpo: &[u8]) : Res<()>
+  + consumir(fila: &str) : Res<Vec<Mensagem>>
+  + confirmar(tag: u64) : Res<()>
+}
+
+class "Cliente / Conversor / Storage" as SERV <<comportamento/strategy>>
+class "Topologia" as TOPO <<comportamento/mediator>>
+
+class "Tokio" as TOK <<#[tokio::main]>>
+class "lapin" as LAPIN <<crate>>
+class "image 0.25" as IMG <<crate>>
+
+SERV ..> BRK : unico caminho para AMQP
+TOPO ..> BRK
+BRK ..> PB
+LA ..|> PB
+LA ..> LAPIN
+IOM ..> IMG
+BRK ..> LA
+SERV ..> IOM : so o conversor
+
+TOK ..> BRK
+
+note right of LAPIN
+  Nada fora de estrutural/adapter nomeia
+  um tipo do lapin. Trocar a biblioteca AMQP
+  e reescrever um arquivo — foi exatamente a
+  troca cogitada (rust-rabbit -> lapin).
+end note
+
+note right of IOM
+  O dominio conhece "converter para tons de cinza",
+  nao to_luma8 / DynamicImage / ImageFormat.
+  Com um adaptador falso, o fluxo roda em teste
+  sem broker e sem crate de imagem.
+end note
+
+note bottom of BRK
+  Assinaturas sinceras: quem chama nao sabe que lapin
+  e async nem que cada chamada devolve Result por dentro.
+end note
+@enduml

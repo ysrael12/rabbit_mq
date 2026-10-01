@@ -1,0 +1,103 @@
+@startuml
+' Diagrama 11 — estrutural/decorator + comportamento/observer
+skinparam shadowing false
+skinparam dpi 130
+skinparam defaultFontName "Segoe UI"
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #EAF1FA
+  BorderColor #1F3B5C
+  FontColor #12314F
+  AttributeFontSize 12
+  AttributeFontColor #33475B
+}
+skinparam note {
+  BackgroundColor #FFF9E6
+  BorderColor #B8860B
+}
+hide circle
+hide empty members
+
+title <size:17>estrutural/decorator + comportamento/observer — empilhar comportamento sem editar o conversor</size>
+
+package "estrutural/decorator" {
+  interface "Passo" as P <<trait>> {
+    + tratar(&mut self, corpo: Vec<u8>) : Res<Vec(u8)>
+  }
+  class "Converter" as CONV_P <<base>> {
+    + tratar(corpo) : Res<Vec(u8)>
+  }
+  class "Validar<P: Passo>" as VAL <<decorador>> {
+    - interno : P
+    + tratar(corpo) : Res<Vec(u8)>
+  }
+  class "MedirTempo<P: Passo>" as MED <<decorador>> {
+    - interno : P
+    + tratar(corpo) : Res<Vec(u8)>
+  }
+  class "Reenviar<P: Passo>" as REENV <<decorador>> {
+    - interno : P
+    - tentativas : u8
+    + tratar(corpo) : Res<Vec(u8)>
+  }
+}
+
+package "comportamento/observer" {
+  interface "Observador" as O <<trait>> {
+    + registrar(&mut self, e: &Evento)
+  }
+  enum "Evento" as EV {
+    Publicada
+    Convertida
+    Salva
+    Descartada
+  }
+  class "Assunto" as A <<sujeito>> {
+    - observadores : Vec<Box<dyn Observador>>
+    + inscrever(&mut self, o: Box<dyn Observador>)
+    + notificar(&mut self, e: Evento)
+  }
+  class "ContadorPublicadas" as O1 <<observador>>
+  class "ContadorSalvas" as O2 <<observador>>
+  class "LogArquivo" as O3 <<observador>>
+  class "ResumoConsole" as O4 <<observador>>
+}
+
+class "Conversor" as CV <<comportamento/strategy>>
+class "Cliente" as CL <<comportamento/strategy>>
+class "Storage" as ST <<comportamento/strategy>>
+class "io_imagem" as IOM <<estrutural/adapter>>
+
+CONV_P ..|> P
+VAL ..|> P
+MED ..|> P
+REENV ..|> P
+VAL --> P : envolve
+MED --> P : envolve
+REENV --> P : envolve
+CONV_P ..> IOM
+
+CV ..> P : chama tratar, sem saber quem esta por fora
+CL ..> A
+CV ..> A
+ST ..> A
+O1 ..|> O
+O2 ..|> O
+O3 ..|> O
+O4 ..|> O
+A o-- O
+A ..> EV
+O4 ..> EV
+
+note bottom of P
+  Stack de hoje: Converter puro.
+  Validacao esta declarada fora de escopo e um dia entra
+  como medidor ou validador aqui — sem if dentro do conversor.
+end note
+
+note bottom of A
+  O resumo numerico da execucao (publicadas x salvas por storage)
+  e apenas a view de um observador. O requisito de verificacao
+  passa a ter um unico lugar que conta.
+end note
+@enduml

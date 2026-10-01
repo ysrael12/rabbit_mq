@@ -89,6 +89,18 @@ não no código, onde custariam refazer o fluxo de publicação, de consumo e de
 | 4 | Classes — especialização em cliente/conversor/storage | [`docs/uml/04 classes dependencias.puml`](docs/uml/04%20classes%20dependencias.puml) |
 | 5 | Classes de **implementação** — campos e assinaturas prontos para virar código | [`docs/uml/05 classes implementacao.puml`](docs/uml/05%20classes%20implementacao.puml) |
 
+Diagramas de implementação por padrão (as figuras 7 a 11 abaixo estão em
+[`docs/patterns.md`](docs/patterns.md)):
+
+| Figura | Diagrama | Arquivo |
+|---|---|---|
+| 6 | Mapa de módulos de `src/` — dependências entre os padrões | [`docs/uml/06 mapa de modulos por padrao.puml`](docs/uml/06%20mapa%20de%20modulos%20por%20padrao.puml) |
+| 7 | Factory Method — quem constrói cada serviço | [`docs/uml/07 factory method.puml`](docs/uml/07%20factory%20method.puml) |
+| 8 | Strategy + Template Method — o contrato dos três papéis | [`docs/uml/08 strategy e template method.puml`](docs/uml/08%20strategy%20e%20template%20method.puml) |
+| 9 | Mediator + Command — topologia e despacho | [`docs/uml/09 mediator e command.puml`](docs/uml/09%20mediator%20e%20command.puml) |
+| 10 | Facade + Adapter — a fronteira onde o `lapin` fica confinado | [`docs/uml/10 facade e adapter.puml`](docs/uml/10%20facade%20e%20adapter.puml) |
+| 11 | Decorator + Observer — empilhar comportamento sem editar o conversor | [`docs/uml/11 decorator e observer.puml`](docs/uml/11%20decorator%20e%20observer.puml) |
+
 PNGs renderizados em [`docs/uml/png/`](docs/uml/png/). Para re-renderizar (precisa de Java +
 GraphViz `dot`):
 

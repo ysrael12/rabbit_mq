@@ -1,0 +1,89 @@
+@startuml
+' Diagrama 09 — comportamento/mediator + command
+skinparam shadowing false
+skinparam dpi 130
+skinparam defaultFontName "Segoe UI"
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #EAF1FA
+  BorderColor #1F3B5C
+  FontColor #12314F
+  AttributeFontSize 12
+  AttributeFontColor #33475B
+}
+skinparam note {
+  BackgroundColor #FFF9E6
+  BorderColor #B8860B
+}
+hide circle
+hide empty members
+
+title <size:17>comportamento/mediator + command — quem declara a topologia e quem dispara</size>
+
+class "Invocador" as INV <<struct>> {
+  - servico : Box<dyn Servico>
+  - pedido : Pedido
+  + novo(pedido: Pedido, servico: Box<dyn Servico>) : Invocador
+  + executar(self) : Res<u64>
+}
+
+enum "Pedido" as PED {
+  Cliente
+  Conversor
+  Storage
+}
+
+class "Topologia" as TOPO <<mediator>> {
+  - cfg : Config
+  + preparar(&self, broker: &Broker, papel: Papel) : Res<()>
+  + nome_fila_originais(&self) : &str
+  + nome_exchange(&self) : &str
+  + nome_fila_storage(&self) : &str
+}
+
+class "Broker" as FAC <<estrutural/facade>> {
+  + conectar(cfg: &Config) : Res<Broker>
+  + declarar_fila(nome: &str) : Res<()>
+  + declarar_fanout(nome: &str) : Res<()>
+  + vincular(fila: &str, exchange: &str) : Res<()>
+  + definir_prefetch(n: u16) : Res<()>
+  + publicar_persistente(destino: &str, corpo: &[u8]) : Res<()>
+  + consumir(fila: &str) : Res<Vec<Mensagem>>
+  + confirmar(tag: u64) : Res<()>
+}
+
+class "Cliente" as CLI <<strategy>>
+class "Conversor" as CONV <<strategy>>
+class "Storage" as STOR <<strategy>>
+
+interface "Servico" as SERV <<comportamento/strategy>> {
+  + executar(&mut self) : Res<u64>
+}
+
+INV ..> PED
+INV ..> SERV
+CLI ..> TOPO
+CONV ..> TOPO
+STOR ..> TOPO
+TOPO ..> FAC
+TOPO ..> CFG <<comum/config>>
+
+note right of TOPO
+  preparar() por papel — a fanout mora aqui:
+  todos        -> declarar_fila(fila.originais)
+                  declarar_fanout(convertidas)
+  Cliente      -> (so publica na fila de entrada)
+  Conversor    -> (so publica no exchange)
+  Storage      -> declarar_fila(fila.storage.N)
+                  vincular(fila.storage.N, convertidas)
+  Cada bind faz o broker copiar a mesma mensagem
+  para mais uma replica. Nenhuma linha de roteamento
+  existe na aplicacao.
+end note
+
+note bottom of INV
+  Adicionar "app inspecionar" e um braco novo no Pedido
+  mais uma implementacao de Servico — sem if novo dentro
+  dos outros comandos.
+end note
+@enduml

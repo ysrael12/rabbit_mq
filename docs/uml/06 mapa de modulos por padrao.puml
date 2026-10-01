@@ -1,0 +1,98 @@
+@startuml
+' Diagrama 06 — mapa de modulos de src/ por categoria GoF
+skinparam shadowing false
+skinparam dpi 130
+skinparam defaultFontName "Segoe UI"
+skinparam defaultTextAlignment center
+skinparam arrowColor #45637F
+skinparam component {
+  BackgroundColor #EAF1FA
+  BorderColor #1F3B5C
+  FontColor #12314F
+}
+skinparam package {
+  BackgroundColor #F7F9FC
+  BorderColor #1F3B5C
+  FontColor #12314F
+}
+skinparam note {
+  BackgroundColor #FFF9E6
+  BorderColor #B8860B
+}
+
+title <size:17>src/ organizado por padrao — dependencias entre modulos</size>\n<size:12>Cada pasta e um padrao; as setas apontam para quem o modulo precisa</size>
+
+component "main.rs\n<size:11>args -> Config -> Comando</size>" as MAIN
+
+package "criacional" {
+  component "factory_method\n<size:11>FabricaServico</size>" as FM
+}
+
+package "comportamento" {
+  component "command\n<size:11>Pedido, Comando, Invocador</size>" as CMD
+  component "strategy\n<size:11>trait Servico + Cliente | Conversor | Storage</size>" as ST
+  component "template_method\n<size:11>Servico::executar</size>" as TM
+  component "mediator\n<size:11>Topologia: filas, exchange, binds</size>" as MED
+  component "observer\n<size:11>Evento, Observador, Assunto</size>" as OBS
+}
+
+package "estrutural" {
+  component "facade\n<size:11>Broker</size>" as FAC
+  component "adapter\n<size:11>lapin_adapter, io_imagem</size>" as ADP
+  component "decorator\n<size:11>Passo + decoradores</size>" as DEC
+}
+
+package "comum" {
+  component "config / erro\n<size:11>Config::from_env, Res T</size>" as CFG
+  component "mensagem\n<size:11>nome + bytes</size>" as MSG
+  component "relatorio\n<size:11>formato do resumo</size>" as REL
+}
+
+package "crates externos" {
+  component "lapin" as LAPIN
+  component "tokio" as TOKIO
+  component "image 0.25" as IMG
+  component "async-trait" as AT
+}
+
+MAIN ..> CMD
+MAIN ..> FM
+MAIN ..> CFG
+
+FM ..> ST
+FM ..> MED
+FM ..> CFG
+
+CMD ..> ST
+CMD ..> OBS
+
+ST ..> TM : usa o default
+ST ..> MED
+ST ..> FAC
+ST ..> DEC
+ST ..> MSG
+ST ..> OBS
+ST ..> REL
+
+MED ..> FAC
+MED ..> CFG
+DEC ..> ADP
+DEC ..> MSG
+
+FAC ..> ADP
+ADP ..> LAPIN
+ADP ..> IMG
+TM ..> TOKIO
+ST ..> AT
+OBS ..> REL
+
+note right of FAC
+  Unico acesso a biblioteca AMQP.
+  Nada fora de estrutural/ nomeia um tipo do lapin.
+end note
+
+note bottom of DEC
+  Passo e o ponto onde decorar e possivel:
+  o conversor nao sabe que existe validacao.
+end note
+@enduml
