@@ -51,6 +51,29 @@ código de roteamento — a aplicação não tem uma linha decidindo para qual s
 
 Diagrama da arquitetura proposta: [`docs/arquitetura-proposta.png`](docs/arquitetura-proposta.png)
 
+### 2.1 Estado atual do código (ler antes de começar)
+
+```bash
+cargo run                  # imprime "Hello, world!" — esqueleto apenas
+```
+
+O `src/` está organizado por padrão (pastas criadas, arquivos ainda não escritos). O projeto
+**compila** mesmo com as pastas vazias: `Cargo.toml` é um binário simples e nenhum `mod` é
+declarado no `main.rs` ainda. O caminho é escrever os módulos e ir declarando cada um em
+`main.rs` (`mod comportamento::strategy::servico;` …), na ordem em que forem implementados.
+
+| Já existe | Ainda não existe |
+|---|---|
+| `Cargo.toml` / `Cargo.lock` (edition 2024, sem dependências) | dependências (`lapin`, `tokio`, `image`, `async-trait`) |
+| `src/main.rs` (hello world) | os módulos dos padrões |
+| árvore de pastas por padrão GoF + `.gitkeep` | `Dockerfile`, `docker-compose.yml` |
+| `docs/` com os 5 diagramas e `patterns.md` | imagens de teste nas pastas |
+
+Próximo passo, na ordem do fluxo: `comum/config` → `comum/erro` → `estrutural/facade` →
+`estrutural/adapter` → `comportamento/strategy` → `comportamento/template_method` →
+`criacional/factory_method` → `comportamento/command` → `comportamento/mediator` →
+`comportamento/observer` → `estrutural/decorator`.
+
 ## 3. Modelagem feita antes do código
 
 Os diagramas foram feitos **antes** de escrever qualquer linha do programa, e não depois para
@@ -116,7 +139,7 @@ rabbit_mq/
 │   ├── patterns.md                # os padrões GoF, com código e justificativa
 │   ├── arquitetura-proposta.png
 │   └── uml/                       # fontes PlantUML + PNG das 5 figuras
-├── Cargo.toml                     # a definir na implementação (binário único "app")
+├── Cargo.toml                     # binário único "rabbit_mq" (edition 2024)
 ├── Dockerfile                     # multi-stage: rust:slim (build) → debian slim (runtime)
 ├── docker-compose.yml             # rabbitmq + cliente1/2 + conversor1/2 + storage1/2
 ├── src/
